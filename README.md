@@ -29,3 +29,4 @@ some filtering (moving average) to reduce this.
     AdruinoBLE library 1.1.2)
     
   3D files will be pulished on Thingiverse and more details on Instructables
+  https://www.instructables.com/howto/Opengradesim/
