@@ -42,7 +42,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <PID_v1.h>
-#include "defines.h"
+#include "Defines.h"
 #include "PushButton.h"
 #include "OLEDDisplay.h"'
 #include "MyMenu.h"
@@ -164,11 +164,11 @@ void setup() {
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU!");
     resetSystem();
-  } 
-// else {
-//    // auto zero trainer incline
-//    autoLevelTrainerIncline();
-//  }
+  }
+  // else {
+  //    // auto zero trainer incline
+  //    autoLevelTrainerIncline();
+  //  }
 
   //turn the motor PID controller on
   motorPID.SetMode(AUTOMATIC);
@@ -178,8 +178,8 @@ void setup() {
   // begin BLE initialization reset if fails
   if (!BLE.begin()) {
     Serial.println("starting BLE failed!");
-//    displayLineLeft(0, 21, 0, F("BLE failed!"));
-//    doDisplay();
+    //    displayLineLeft(0, 21, 0, F("BLE failed!"));
+    //    doDisplay();
     resetSystem();
   }
 
@@ -210,7 +210,7 @@ void loop() {
 
 boolean autoGrade() {
   static long previousSpeedandPowerMillis = 0;
-  
+
   if (!controllerLeveled) {
     autoLevelTrainerIncline();
     return false;
@@ -225,7 +225,7 @@ boolean autoGrade() {
     {
       getBLEServices(); // BLE setup
     }
-     // fetch new speed and power data from trainer 5 times a second.
+    // fetch new speed and power data from trainer 5 times a second.
     long currentMillis = millis();
     if (currentMillis - previousSpeedandPowerMillis >= 200)
     {
@@ -302,25 +302,18 @@ void autoGradeDisplay()
 
 }
 void getBLEServices() {
+  
+  displayLineLeft(0, 0, 0, F("Bluetooth scanning"));
+  displayLineLeft(1, 12, 1, F("for ((CABLE)) Device"));
+  displayLineLeft(2, 24, 2, F(" ")); // erase the unused line
+  doDisplay();
 
+  // entering blocking code
   while (!cablePeripheral.connected()) {
     Serial.println("BLE Central");
     Serial.println("Turn on trainer and CABLE module and check batteries");
+    
     // Scan or rescan for BLE services
-    displayLineLeft(0, 0, 0, F("Bluetooth scanning"));
-    displayLineLeft(1, 12, 1, F("for ((CABLE)) Device"));
-    displayLineLeft(2, 24, 2, F(" ")); // erase the unused line
-    doDisplay();
-    //
-    //    OLED.setTextSize(1);
-    //    OLED.setTextColor(SSD1306_WHITE);
-    //    OLED.setCursor(5, 10);
-    //    OLED.print(F("BLE Scanning"));
-    //    OLED.setCursor(5, 20);
-    //    OLED.print(F("for CABLE Device"));
-    //    OLED.display();
-    //    OLED.clearDisplay();
-
     BLE.scan();
 
     // check if a peripheral has been discovered and allocate it
@@ -335,7 +328,6 @@ void getBLEServices() {
       Serial.print("' ");
       Serial.print(cablePeripheral.advertisedServiceUuid());
       Serial.println();
-
 
       if (cablePeripheral.localName() == ">CABLE") {
         // stop scanning
@@ -357,7 +349,8 @@ void getBLEServices() {
 
       }
     }
-  }
+    delay(200);
+  } // end while
 }
 
 void getsubscribedtoSensor(BLEDevice cablePeripheral) {
@@ -539,14 +532,14 @@ void refreshSpeedandPower(void) {
     }
 
   }
-  
+
 }
 
 bool autoLevelTrainerIncline() {
-/* Samples the controler head grade n times and saves it as a correction offset to be applied when calculating bike grade.
-*  Press any key to exit without updating. Could be modified to give up auto-leverl and accept current offset. */
+  /* Samples the controler head grade n times and saves it as a correction offset to be applied when calculating bike grade.
+     Press any key to exit without updating. Could be modified to give up auto-leverl and accept current offset. */
 
- 
+
   Serial.print("auto leveling trainer.");
   static int sampleTimes = 0;
   static int previousSample = 0;
@@ -640,7 +633,7 @@ bool setWeight(void)
 bool setWheelSize(void)
 {
   if (setNumber(wheelCircCM, 1, 1000, 1, F(" cm")))
-    {
+  {
     updateUserSettings();
     return true;
   } else {
@@ -770,9 +763,9 @@ void getPIDSettings() {
   Kd = analogRead(A1) * .001;     // Serial.print("  Kd = "); Serial.print(kd);
   Kd_avg = movingAverageFilter_Kd.process(Kd);  //Serial.print("  Kd_avg = "); Serial.println(Kd_avg);
   motorPID.SetTunings(Kp_avg, Ki_avg, Kd_avg);
-//  Serial.println(Kp_avg);
-//  Serial.println(Ki_avg);
-//  Serial.println(Kd_avg);
+  //  Serial.println(Kp_avg);
+  //  Serial.println(Ki_avg);
+  //  Serial.println(Kd_avg);
 }
 
 void initUserSettings()

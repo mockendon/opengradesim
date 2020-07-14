@@ -63,7 +63,7 @@ void initOLED()
   OLED->print(F("FW Version: "));
   OLED->print(VERSION_NUMBER);
   OLED->display();
-  delay(1000);                    // Pause for version # display
+  delay(500);                    // Pause for version # display
   OLED->clearDisplay();
 #endif
 }
@@ -87,7 +87,6 @@ void doCursor() {
 #endif
   }
 }
-
 
 void doDisplay() {
   //  static unsigned long preMil = millis();
