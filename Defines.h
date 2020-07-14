@@ -15,11 +15,16 @@
 #define NUM_LCD_ROWS 3
 #define NUM_LCD_COLS 21
 
+#define SCREEN_WIDTH 128     // OLED display width, in pixels
+#define SCREEN_HEIGHT 32     // OLED display height, in pixels
+
 #define DISPLAY_DELAY 500
 
 #define VERSION_NUMBER 1.01
 #define redLedPin         8  // bi-color LED connected to digital pin
 #define commonHighLedPin  9  // bi-color LED connected to digital pin
 #define greenLedPin       10 // bi-color LED connected to digital pin
+
+#define resetPin          19  // Pin linked to RST pin to allow software to do hard reset
 
 #endif /* DEFINES_H_ */

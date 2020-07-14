@@ -27,6 +27,7 @@ void displayTextRight(int row, int rowPos, int startcol, int colwidth, int texts
 void displayTextRight(int row, int rowPos, int startcol, int colwidth, int textsize, const __FlashStringHelper* message);
 
 bool setNumber(int& val, int valMin, int valMax, int increment, const __FlashStringHelper* fmtStr);
+bool setDouble(double& val, double valMin, double valMax, double increment, const __FlashStringHelper* fmtStr);
 void checkButtons();
 bool pressAnyButtonToExit();
 void doCursor();

@@ -13,9 +13,16 @@ boolean autoLevelTrainerIncline();
 boolean setPIDParms();
 boolean resetSystem();
 boolean dimDisplay(); // brightness controll
+boolean toggleOLEDDimOn();
+boolean toggleOLEDDimOff();
+boolean startPhoneySpeedPower();
+boolean stopPhoneySpeedPower();
 
-boolean gotoMenuOne();
-boolean gotoMenuTwo();
+boolean gotoMainMenu();
+boolean gotoSettingsMenu();
+boolean gotoOnOffMenu();
+boolean gotoDebugMenu();
+
 int getBtnPushed();
 
 /*****************************
@@ -51,7 +58,7 @@ boolean SimpleSerialMenu::selectionMade() {
   // This is a simplified example
   // Edge detection and debouncing are exercises left to the user
   //return btnPushed == 3 ? true : false;
-    return getBtnPushed() == 3 ? true : false;
+  return getBtnPushed() == 3 ? true : false;
 }
 //
 //void SimpleSerialMenu::displayMenu() {
@@ -115,23 +122,40 @@ void SimpleSerialMenu::displayMenu() {
  ******************************
  *****************************/
 
-MenuItem PROGMEM firstList[3] = {
-    { "Manual", setGrade }
+MenuItem PROGMEM mainMenu[3] = {
+  { "Manual", setGrade }
   , { "Smart Trainer", autoGrade }
-  , { "Settings", gotoMenuTwo }
+  , { "Settings", gotoSettingsMenu }
 };
-MenuItem PROGMEM secondList[7] = {
-    { "Back", gotoMenuOne }
-  , { "Set Weight", setWeight }
+
+MenuItem PROGMEM settingsMenu[8] = {
+  { "Set Weight", setWeight }
   , { "Set Wheel Size", setWheelSize }
   , { "Auto-level", autoLevelTrainerIncline }
   , { "Motor PID", setPIDParms }
-  , { "Dim Display", dimDisplay }
+  , { "Display", gotoOnOffMenu }
   , { "Reset", resetSystem }
+  , { "Debug Mode", gotoDebugMenu }
+  , { "<Back>", gotoMainMenu }
 };
 
-MenuList list1(firstList, 3);
-MenuList list2(secondList, 7);
+MenuItem PROGMEM onOffMenu[3] = {
+  { "Dimmer", toggleOLEDDimOn }
+  , { "Brighter", toggleOLEDDimOff }
+  , { "<Back>", gotoSettingsMenu }
+};
+
+MenuItem PROGMEM debugMenu[3] = {
+
+  { "sim 15kpm,210W", startPhoneySpeedPower }
+  , { "End sim", stopPhoneySpeedPower }
+  , { "<Back>", gotoSettingsMenu }
+};
+
+MenuList list1(mainMenu, 3);
+MenuList list2(settingsMenu, 8);
+MenuList list3(onOffMenu, 3);
+MenuList list4(debugMenu, 3);
 
 SimpleSerialMenu myMenu;
 
@@ -144,13 +168,25 @@ SimpleSerialMenu myMenu;
    false if the function is not done and wants to be called again
  ******************************
  *****************************/
-boolean gotoMenuOne() {
+boolean gotoMainMenu() {
   myMenu.setCurrentMenu(&list1);
   return true;
 }
 
-boolean gotoMenuTwo() {
-  Serial.println(F("loading menu two"));
+boolean gotoSettingsMenu() {
+  //Serial.println(F("loading settings two"));
   myMenu.setCurrentMenu(&list2);
+  return true;
+}
+
+boolean gotoOnOffMenu() {
+  //Serial.println(F("loading on/off menu"));
+  myMenu.setCurrentMenu(&list3);
+  return true;
+}
+
+boolean gotoDebugMenu() {
+  //Serial.println(F("loading debug menu"));
+  myMenu.setCurrentMenu(&list4);
   return true;
 }

@@ -124,10 +124,16 @@ void doDisplay() {
   //  }
 }
 
-bool dimDisplay () {
+bool toggleOLEDDimOn () {
   OLED->dim(true);
   return true;
 }
+
+bool toggleOLEDDimOff () {
+  OLED->dim(false);
+  return true;
+}
+
 void checkButtons(void) {
 
   if (btn1.isOn()) {
@@ -377,6 +383,67 @@ bool setNumber(int& val, int valMin, int valMax, int increment, const __FlashStr
   // last run: reset firstTime to True and return true to end setNumber.
   static int adjustedVal = 0;
   static int origVal = 0;
+  static bool firstTime = true;
+  
+  switch (firstTime)
+  {
+    case true:
+      origVal = adjustedVal = val;
+      valIsSet = false;
+      firstTime = false;
+      break;
+    case false:
+      switch (valIsSet)
+      {
+        case false:
+          adjustedVal = adjustNumber( adjustedVal, origVal, valMin, valMax, increment, fmtStr );
+          break;
+        case true:
+          firstTime = true;
+          val = adjustedVal;
+          break;
+      }
+      break;
+  }
+  return firstTime;
+}
+
+int adjustDouble(double val, double origVal, double valMin, double maxvalMax, double increment, const __FlashStringHelper* fmtStr)
+{
+  Serial.println("adjustnumber");
+  char buf[20];
+  sprintf_P(buf, PSTR("  %g%s"), val, fmtStr);
+  //sprintf_P(buf, fmtStr*, val, btnPushed);
+  displayLineLeft(1, 12, 2, buf);
+  displayLineLeft(2, 24, 1, " "); // erase the unused lines
+Serial.println(btnPushed);
+  switch (btnPushed) {
+    
+    case 1:
+      val = val - increment;
+      break;
+    case 2:
+      val = val + increment;
+      break;
+    case 3:
+      valIsSet = true;
+      break;
+    case 4: // pressing both btn 1 and 2 - restore to last saved weight
+      val = origVal;
+      break;
+    default:
+      break;
+  }
+  return val;
+}
+bool setDouble(double& val, double valMin, double valMax, double increment, const __FlashStringHelper* fmtStr)
+{
+  // This will loop 3 times minumum.
+  // run 1: set valIsSet to false.
+  // run 2 - n:  run adjustNumber (one or more times).
+  // last run: reset firstTime to True and return true to end setNumber.
+  static double adjustedVal = 0;
+  static double origVal = 0;
   static bool firstTime = true;
   
   switch (firstTime)
