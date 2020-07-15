@@ -240,7 +240,7 @@ boolean gradeSim() {
     if (firstTime)
     {
       firstTime = false;
-      return false; // skipping first cycle to ignore the selectbtnPress that got us here.
+      return false; // skipping first cycle to ignore the selectBtnPressed that got us here.
     }
     // smart trainer mode
     if (selectBtnPressed())
@@ -294,7 +294,7 @@ boolean gradeSim() {
   {
     moveActuator();
   }
-  
+
 }
 
 void gradeSimDisplay()
@@ -330,19 +330,14 @@ void gradeSimDisplay()
   //displayTextLeft( row,  rowPos,  startcol,  colwidth,  textsize, message )
   displayTextLeft (2, 24, 0, 6, 1, buf);
 
-  // Display manual and smart trainer incline bottom right
-  if (targetGrade > 0) {
-    if (inManualMode) {
-      sprintf_P(buf, PSTR("Manual %.2g%%"), targetGrade); // Display targetGrade bottom right
-    } else {
-      sprintf_P(buf, PSTR("Trainer %.2g%%"), targetGrade); // Display targetGrade bottom right
-    }
-    //void displayTextRight( row, rowPos, startcol, colwidth, textsize,  message)
-    displayTextRight(2, 24, 20, 13, 1, buf);
+  // Display manual or smart trainer incline bottom right
+  if (inManualMode) {
+    sprintf_P(buf, PSTR("Manual %.2g%%"), targetGrade); // Display targetGrade bottom right
   } else {
-    displayTextRight(2, 24, 20, 6, 1, "0%");
+    sprintf_P(buf, PSTR("Trainer %.2g%%"), targetGrade); // Display targetGrade bottom right
   }
-
+  //void displayTextRight( row, rowPos, startcol, colwidth, textsize,  message)
+  displayTextRight(2, 24, 20, 13, 1, buf);
 
 }
 void getBLEServices() {
