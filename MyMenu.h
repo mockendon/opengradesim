@@ -3,12 +3,10 @@
 #include "defines.h"
 #include "OLEDDisplay.h"
 //
-//int btnPushed = 0;
-//
+
 boolean setWeight();
 boolean setWheelSize();
-boolean setGrade();
-boolean autoGrade();
+boolean gradeSim();
 boolean autoLevelTrainerIncline();
 boolean setPIDParms();
 boolean resetSystem();
@@ -23,7 +21,7 @@ boolean gotoSettingsMenu();
 boolean gotoOnOffMenu();
 boolean gotoDebugMenu();
 
-int getBtnPushed();
+int getbtnPressed();
 
 /*****************************
  ******************************
@@ -45,20 +43,17 @@ class SimpleSerialMenu:
 };
 
 int SimpleSerialMenu::updateSelection() {
-  if (getBtnPushed() == 2) {
+  if (getbtnPressed() == INCLINE_BTN) {
     return 1;
   }
-  if (getBtnPushed() == 1) {
+  if (getbtnPressed() == DECLINE_BTN) {
     return -1;
   }
   return 0;
 }
 
 boolean SimpleSerialMenu::selectionMade() {
-  // This is a simplified example
-  // Edge detection and debouncing are exercises left to the user
-  //return btnPushed == 3 ? true : false;
-  return getBtnPushed() == 3 ? true : false;
+  return getbtnPressed() == SELECT_BTN ? true : false;
 }
 //
 //void SimpleSerialMenu::displayMenu() {
@@ -67,7 +62,7 @@ boolean SimpleSerialMenu::selectionMade() {
 //  static unsigned long preMil = millis();
 //  unsigned long curMil = millis();
 //  if(curMil - preMil >= 500) {  // print every half second
-//    //Serial.print("btnPushed: "); Serial.println(btnPushed);
+//    //Serial.print("btnPressed: "); Serial.println(btnPressed);
 //    preMil = curMil;
 //
 //    char outBuf[17];
@@ -122,9 +117,8 @@ void SimpleSerialMenu::displayMenu() {
  ******************************
  *****************************/
 
-MenuItem PROGMEM mainMenu[3] = {
-  { "Manual", setGrade }
-  , { "Smart Trainer", autoGrade }
+MenuItem PROGMEM mainMenu[2] = {
+  { "Grade Sim", gradeSim }
   , { "Settings", gotoSettingsMenu }
 };
 
@@ -152,7 +146,7 @@ MenuItem PROGMEM debugMenu[3] = {
   , { "<Back>", gotoSettingsMenu }
 };
 
-MenuList list1(mainMenu, 3);
+MenuList list1(mainMenu, 2);
 MenuList list2(settingsMenu, 8);
 MenuList list3(onOffMenu, 3);
 MenuList list4(debugMenu, 3);
@@ -174,19 +168,16 @@ boolean gotoMainMenu() {
 }
 
 boolean gotoSettingsMenu() {
-  //Serial.println(F("loading settings two"));
   myMenu.setCurrentMenu(&list2);
   return true;
 }
 
 boolean gotoOnOffMenu() {
-  //Serial.println(F("loading on/off menu"));
   myMenu.setCurrentMenu(&list3);
   return true;
 }
 
 boolean gotoDebugMenu() {
-  //Serial.println(F("loading debug menu"));
   myMenu.setCurrentMenu(&list4);
   return true;
 }

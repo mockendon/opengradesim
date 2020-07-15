@@ -67,6 +67,7 @@ float smoothRadPitch = 0;         // variable for the pitch
 int trainerIncline = 0;           // variable for the % trainerIncline (actual per accelerometers)
 double trainerInclineZeroAdj = 0; // inline adjustment from auto zero trainer incline
 double targetGrade = 0;           // variable for the calculated grade (aim)
+double manualTargetGrade = 0;
 bool controllerLeveled = false;
 
 MovingAverageFilter movingAverageFilter_Kp(8);    // 2 second power average at 4 samples per sec
@@ -208,33 +209,72 @@ void loop() {
 
 ////////////////////////   method declarations  ///////////////////////////////
 
-boolean autoGrade() {
+bool inManualMode = false;
+
+boolean gradeSim() {
   static long previousSpeedandPowerMillis = 0;
+  static bool firstTime = true;
 
   if (!controllerLeveled) {
     autoLevelTrainerIncline();
     return false;
   }
 
-  if (debugging)
-  {
-    powerTrainer = movingAverageFilter_power.process(210);
-    speedTrainer = movingAverageFilter_speed.process(15);
-  } else {
-    if (!cablePeripheral.connected())
-    {
-      getBLEServices(); // BLE setup
-    }
-    // fetch new speed and power data from trainer 5 times a second.
-    long currentMillis = millis();
-    if (currentMillis - previousSpeedandPowerMillis >= 200)
-    {
-      previousSpeedandPowerMillis = currentMillis;
-      refreshSpeedandPower(); // Get any updated data
-    }
-  }
+  Serial.print("inManualMode: "); Serial.print(inManualMode);
+  Serial.print(", selectBtnPressed: "); Serial.print(selectBtnPressed());
+  Serial.print(", upDownBtnPressed: "); Serial.print(upDownBtnPressed());
+  Serial.print(", btnPressed:"); Serial.print(getbtnPressed());
+  Serial.print(", firstTime:"); Serial.print(firstTime);
+  Serial.println("");
 
-  calculateTargetGrade(); // Use power and speed to calculate the targetGrade
+  if (inManualMode)
+  {
+    setDouble(targetGrade, 1, 45, 1); // check for manual changes in grade
+
+    if (selectBtnPressed())
+    {
+      inManualMode = false;
+      return false;
+    }
+  } else {
+    if (firstTime)
+    {
+      firstTime = false;
+      return false; // skipping first cycle to ignore the selectbtnPress that got us here.
+    }
+    // smart trainer mode
+    if (selectBtnPressed())
+    {
+      Serial.println("exiting gradeSim");
+      firstTime = true; // reset for next entry
+      return true; // exit gradeSim loop
+    } else {
+      if (upDownBtnPressed()) // switching to manual mode
+      {
+        inManualMode = true;
+        return false;
+      }
+    }
+
+    if (debugging)
+    {
+      powerTrainer = movingAverageFilter_power.process(210);
+      speedTrainer = movingAverageFilter_speed.process(15);
+    } else {
+      if (!cablePeripheral.connected())
+      {
+        getBLEServices(); // BLE setup
+      }
+      // fetch new speed and power data from trainer 5 times a second.
+      long currentMillis = millis();
+      if (currentMillis - previousSpeedandPowerMillis >= 200)
+      {
+        previousSpeedandPowerMillis = currentMillis;
+        refreshSpeedandPower(); // Get any updated data
+      }
+    }
+    calculateTargetGrade(); // Use power and speed to calculate the targetGrade
+  }
 
   findTrainerIncline(true); // read the accelerometer to find auto-level adjusted trainerIncline
   trainerInclineErr = -abs(targetGrade - trainerIncline); // make err negative if it isnt already.
@@ -242,22 +282,22 @@ boolean autoGrade() {
   //Serial.print(" inclineErr:");
   //Serial.println(trainerInclineErr);
 
+
   getPIDSettings();
   motorPID.Compute(); // Use target angle and trainer angle to calc the motor pwm value.
 
   // Display the current data
-  autoGradeDisplay();
+  gradeSimDisplay();
 
   // Update the actuator positon only if the trainer is in use
   if ((powerTrainer > 40) && (speedTrainer > 5))
   {
     moveActuator();
   }
-
-  return pressAnyButtonToExit();
+  
 }
 
-void autoGradeDisplay()
+void gradeSimDisplay()
 {
   displayLineLeft(0, 20, 1, " "); // erase line 0
   displayLineLeft(1, 20, 1, " "); // erase line 1
@@ -290,29 +330,33 @@ void autoGradeDisplay()
   //displayTextLeft( row,  rowPos,  startcol,  colwidth,  textsize, message )
   displayTextLeft (2, 24, 0, 6, 1, buf);
 
-  // Display target trainerIncline bottom right
+  // Display manual and smart trainer incline bottom right
   if (targetGrade > 0) {
-    sprintf_P(buf, PSTR("%.2g%%"), targetGrade); // Display targetGrade bottom right
+    if (inManualMode) {
+      sprintf_P(buf, PSTR("Manual %.2g%%"), targetGrade); // Display targetGrade bottom right
+    } else {
+      sprintf_P(buf, PSTR("Trainer %.2g%%"), targetGrade); // Display targetGrade bottom right
+    }
     //void displayTextRight( row, rowPos, startcol, colwidth, textsize,  message)
-    displayTextRight(2, 24, 20, 6, 1, buf);
+    displayTextRight(2, 24, 20, 13, 1, buf);
   } else {
-    displayTextRight(2, 24, 20, 6, 1, "0 %");
+    displayTextRight(2, 24, 20, 6, 1, "0%");
   }
 
 
 }
 void getBLEServices() {
-  
-  displayLineLeft(0, 0, 0, F("Bluetooth scanning"));
-  displayLineLeft(1, 12, 1, F("for ((CABLE)) Device"));
-  displayLineLeft(2, 24, 2, F(" ")); // erase the unused line
+
+  displayLineLeft(1, 12, 0, F("Bluetooth scanning"));
+  displayLineLeft(2, 24, 1, F("for ((CABLE)) Device"));
+  //displayLineLeft(2, 24, 2, F(" ")); // erase the unused line
   doDisplay();
 
   // entering blocking code
   while (!cablePeripheral.connected()) {
     Serial.println("BLE Central");
     Serial.println("Turn on trainer and CABLE module and check batteries");
-    
+
     // Scan or rescan for BLE services
     BLE.scan();
 
@@ -333,16 +377,6 @@ void getBLEServices() {
         // stop scanning
         BLE.stopScan();
         Serial.println("got CABLE device. scan stopped");
-
-        //        OLED.setTextSize(1);
-        //        OLED.setTextColor(SSD1306_WHITE);
-        //        OLED.setCursor(5, 10);
-        //        OLED.print(F("CABLE Found"));
-        //        OLED.setCursor(5, 20);
-        //        OLED.print(F("Authenticating"));
-        //        OLED.display();
-        //        OLED.clearDisplay();
-
 
         // subscribe to BLE speed and power
         getsubscribedtoSensor(cablePeripheral);
@@ -368,8 +402,6 @@ void getsubscribedtoSensor(BLEDevice cablePeripheral) {
   Serial.println("Discovering Cycle Speed and Cadence service ...");
   if (cablePeripheral.discoverService("1816")) {
     Serial.println("Cycle Speed and Cadence Service discovered");
-
-
   } else {
     Serial.println("Cycle Speed and Cadence Attribute discovery failed.");
     cablePeripheral.disconnect();
@@ -394,7 +426,6 @@ void getsubscribedtoSensor(BLEDevice cablePeripheral) {
 
   speedCharacteristic = cablePeripheral.characteristic("2a5B");
   powerCharacteristic = cablePeripheral.characteristic("2a63");
-
 
   // subscribe to the characteristics (note authentication not supported on ArduinoBLE library v1.1.2)
 
@@ -537,7 +568,7 @@ void refreshSpeedandPower(void) {
 
 bool autoLevelTrainerIncline() {
   /* Samples the controler head grade n times and saves it as a correction offset to be applied when calculating bike grade.
-     Press any key to exit without updating. Could be modified to give up auto-leverl and accept current offset. */
+     Press any key to exit without updating. Could be modified to give up auto-level and accept current offset. */
 
 
   Serial.print("auto leveling trainer.");
@@ -619,31 +650,35 @@ bool resetSystem(void) {
   return true;
 }
 
+
 bool setWeight(void)
 {
-  if (setNumber(riderWeight, 1, 1000, 1, F(" kg")))
+  if (setNumber(riderWeight, 1, 1000, 1))
   {
     updateUserSettings();
     return true;
   } else {
+    displayNumber(riderWeight, F(" kg"));
     return false;
   }
 }
 
 bool setWheelSize(void)
 {
-  if (setNumber(wheelCircCM, 1, 1000, 1, F(" cm")))
+  if (setNumber(wheelCircCM, 1, 9999, 1))
   {
     updateUserSettings();
     return true;
   } else {
+    displayNumber(wheelCircCM, F(" cm"));
     return false;
   }
 }
 
 bool setGrade(void)
 {
-  return setDouble(targetGrade, 1, 1000, 1, F("%"));
+  setDouble(targetGrade, 1, 45, 1);
+  displayDouble(targetGrade, F("%"));
 }
 
 boolean startPhoneySpeedPower()
@@ -678,7 +713,7 @@ void moveActuator(void)
     //    }
 
     if (trainerIncline < targetGrade) {
-      SaberSpeed = -abs(SaberSpeed); // flip directioon if trainer is below target
+      SaberSpeed = -abs(SaberSpeed); // flip direction if trainer is below target
     }
     ST.motor(1, SaberSpeed);
   }

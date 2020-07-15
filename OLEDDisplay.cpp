@@ -30,7 +30,7 @@ static bool valIsSet = false;
 PushButton btn1 = { 4, 1 };
 PushButton btn2 = { 5, 2 };
 PushButton btn3 = { 6, 3 };
-int btnPushed = 0;
+int btnPressed = 0;
 
 //display.setTextColor(BLACK, WHITE); // 'inverted' text
 //Characters are rendered in the ratio of 7:10. Meaning, passing font size 1 will render the text at 7×10 pixels per character, passing 2 will render the text at 14×20 pixels per character and so on.
@@ -136,23 +136,33 @@ bool toggleOLEDDimOff () {
 void checkButtons(void) {
 
   if (btn1.isOn()) {
-    btnPushed = btn1.getId();
+    btnPressed = btn1.getId();
     if (btn2.isPressed()) {
-      btnPushed = 4;
+      btnPressed = 4;
     }
   } else if (btn2.isOn()) {
-    btnPushed = btn2.getId();
+    btnPressed = btn2.getId();
     if (btn3.isPressed()) {
-      btnPushed = 5;
+      btnPressed = 5;
     }
   } else if (btn3.isOn()) {
-    btnPushed = btn3.getId();
+    btnPressed = btn3.getId();
   } else  {
-    btnPushed = 0;
+    btnPressed = 0;
   }
 
-  //Serial.print("btnPushed: "); Serial.println(btnPushed);
-  // return btnPushed;
+  //Serial.print("btnPressed: "); Serial.println(btnPressed);
+  // return btnPressed;
+}
+
+bool selectBtnPressed()
+{
+  return (btnPressed == SELECT_BTN) ? true: false;
+}
+
+bool upDownBtnPressed()
+{
+  return ((btnPressed == INCLINE_BTN) || (btnPressed == DECLINE_BTN)) ?  true: false;
 }
 
 bool pressAnyButtonToExit()
@@ -175,7 +185,7 @@ bool pressAnyButtonToExit()
       switch (btnWasPushed)
       {
         case false:
-          btnWasPushed = btnPushed > 0 ? true : false;
+          btnWasPushed = btnPressed > 0 ? true : false;
           return false;
           break;
         case true:
@@ -187,8 +197,8 @@ bool pressAnyButtonToExit()
   return btnWasPushed;
 }
 
-int getBtnPushed() {
- return btnPushed;
+int getbtnPressed() {
+  return btnPressed;
 }
 void bargraph(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
 {
@@ -326,36 +336,46 @@ boolean displayDelay(unsigned int delSeconds) {
 
   switch (state) {
 
-  case 0: {
-    startMil = millis();
-    state++;
-    return false;
-  }
-  case 1: {
-    if (curMil - startMil >= delSeconds * 1000ul) {
-      state = 0;
-      return true;
-    } else {
-      return false;
-    }
-  }
+    case 0: {
+        startMil = millis();
+        state++;
+        return false;
+      }
+    case 1: {
+        if (curMil - startMil >= delSeconds * 1000ul) {
+          state = 0;
+          return true;
+        } else {
+          return false;
+        }
+      }
 
-  }  // end swithc (state)
+  }  // end switch (state)
   return false;
 }
 
-
-int adjustNumber(int val, int origVal, int valMin, int maxvalMax, int increment, const __FlashStringHelper* fmtStr)
+void displayNumber(int val, const __FlashStringHelper* txt)
 {
-  Serial.println("adjustnumber");
   char buf[20];
-  sprintf_P(buf, PSTR("  %d%s"), val, fmtStr);
-  //sprintf_P(buf, fmtStr*, val, btnPushed);
+  sprintf_P(buf, PSTR("  %d%s"), val, F(txt));
+  //sprintf_P(buf, fmtStr*, val, btnPressed);
+  displayLineLeft(1, 12, 2, buf);
+  displayLineLeft(2, 24, 1, " "); // erase the unused line
+}
+
+void displayDouble(double val, const __FlashStringHelper* txt)
+{
+  char buf[20];
+  sprintf_P(buf, PSTR("  %g%s"), val, "%");
   displayLineLeft(1, 12, 2, buf);
   displayLineLeft(2, 24, 1, " "); // erase the unused lines
-Serial.println(btnPushed);
-  switch (btnPushed) {
-    
+}
+
+int adjustNumber(int val, int origVal, int valMin, int maxvalMax, int increment)
+{
+  //todo: limit to min and max
+  switch (btnPressed) {
+
     case 1:
       val = val - increment;
       break;
@@ -374,20 +394,19 @@ Serial.println(btnPushed);
   return val;
 }
 
-bool setNumber(int& val, int valMin, int valMax, int increment, const __FlashStringHelper* fmtStr)
+bool setNumber(int& val, int valMin, int valMax, int increment)
 {
   // This will loop 3 times minumum.
   // run 1: set valIsSet to false.
   // run 2 - n:  run adjustNumber (one or more times).
   // last run: reset firstTime to True and return true to end setNumber.
-  static int adjustedVal = 0;
   static int origVal = 0;
   static bool firstTime = true;
-  
+
   switch (firstTime)
   {
     case true:
-      origVal = adjustedVal = val;
+      origVal  = val;
       valIsSet = false;
       firstTime = false;
       break;
@@ -395,11 +414,10 @@ bool setNumber(int& val, int valMin, int valMax, int increment, const __FlashStr
       switch (valIsSet)
       {
         case false:
-          adjustedVal = adjustNumber( adjustedVal, origVal, valMin, valMax, increment, fmtStr );
+          val = adjustNumber( val, origVal, valMin, valMax, increment );
           break;
         case true:
           firstTime = true;
-          val = adjustedVal;
           break;
       }
       break;
@@ -409,15 +427,9 @@ bool setNumber(int& val, int valMin, int valMax, int increment, const __FlashStr
 
 int adjustDouble(double val, double origVal, double valMin, double maxvalMax, double increment, const __FlashStringHelper* fmtStr)
 {
-  Serial.println("adjustnumber");
-  char buf[20];
-  sprintf_P(buf, PSTR("  %g%s"), val, fmtStr);
-  //sprintf_P(buf, fmtStr*, val, btnPushed);
-  displayLineLeft(1, 12, 2, buf);
-  displayLineLeft(2, 24, 1, " "); // erase the unused lines
-Serial.println(btnPushed);
-  switch (btnPushed) {
-    
+
+  switch (btnPressed) {
+
     case 1:
       val = val - increment;
       break;
@@ -435,20 +447,20 @@ Serial.println(btnPushed);
   }
   return val;
 }
-bool setDouble(double& val, double valMin, double valMax, double increment, const __FlashStringHelper* fmtStr)
+
+bool setDouble(double& val, double valMin, double valMax, double increment)
 {
   // This will loop 3 times minumum.
   // run 1: set valIsSet to false.
   // run 2 - n:  run adjustNumber (one or more times).
-  // last run: reset firstTime to True and return true to end setNumber.
-  static double adjustedVal = 0;
+  // last run: reset firstTime to True and return true to end setNumber.;
   static double origVal = 0;
   static bool firstTime = true;
-  
+
   switch (firstTime)
   {
     case true:
-      origVal = adjustedVal = val;
+      origVal = val;
       valIsSet = false;
       firstTime = false;
       break;
@@ -456,11 +468,10 @@ bool setDouble(double& val, double valMin, double valMax, double increment, cons
       switch (valIsSet)
       {
         case false:
-          adjustedVal = adjustNumber( adjustedVal, origVal, valMin, valMax, increment, fmtStr );
+          val = adjustNumber( val, origVal, valMin, valMax, increment );
           break;
         case true:
           firstTime = true;
-          val = adjustedVal;
           break;
       }
       break;

@@ -26,10 +26,14 @@ void displayTextLeft (int row, int rowPos, int startcol, int colwidth, int texts
 void displayTextRight(int row, int rowPos, int startcol, int colwidth, int textsize, const char* message);
 void displayTextRight(int row, int rowPos, int startcol, int colwidth, int textsize, const __FlashStringHelper* message);
 
-bool setNumber(int& val, int valMin, int valMax, int increment, const __FlashStringHelper* fmtStr);
-bool setDouble(double& val, double valMin, double valMax, double increment, const __FlashStringHelper* fmtStr);
+bool setNumber(int& val, int valMin, int valMax, int increment);
+void displayNumber(int val, const __FlashStringHelper* txt);
+bool setDouble(double& val, double valMin, double valMax, double increment);
+void displayDouble(double val, const __FlashStringHelper* txt);
 void checkButtons();
 bool pressAnyButtonToExit();
+bool upDownBtnPressed();
+bool selectBtnPressed();
 void doCursor();
 void setCursor(uint8_t, uint8_t);
 void showCursor(boolean);
