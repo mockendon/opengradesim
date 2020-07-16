@@ -594,7 +594,11 @@ bool autoLevelTrainerIncline() {
 
       bargraph(0, 27, sampleTimes * (128 / n), 6);
       //return false;
-      return pressAnyButtonToExit();
+      if (pressAnyButtonToExit())
+      {
+        sampleTimes = previousSample = 0;
+        return true;
+      }
       break;
     case n: // must be same angle n times in a row to auto-stop
       trainerInclineZeroAdj = trainerIncline; // record the adjustment
