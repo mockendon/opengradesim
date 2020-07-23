@@ -8,7 +8,7 @@
 #ifndef DEFINES_H_
 #define DEFINES_H_
 
-#define BUTTON_DEBOUNCE 50
+#define BUTTON_DEBOUNCE 60
 #define BUTTON_LONG_PRESS_TIME 2000
 
 #define NO_BTN_PRESS 0
@@ -24,6 +24,8 @@
 #define SCREEN_HEIGHT 32     // OLED display height, in pixels
 
 #define DISPLAY_DELAY 500
+
+#define WAIT_FOR_ACTUATOR_STOP_MIL 4000 //  seconds to wait for linear actuator to reach bottom
 
 #define VERSION_NUMBER 1.01
 #define redLedPin         8  // bi-color LED connected to digital pin

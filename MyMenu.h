@@ -1,4 +1,3 @@
-
 #include "Menu.h"
 #include "defines.h"
 #include "OLEDDisplay.h"
@@ -7,8 +6,12 @@
 boolean setWeight();
 boolean setWheelSize();
 boolean gradeSim();
+boolean levelTrainer();
 boolean autoLevelTrainerIncline();
 boolean setPIDParms();
+boolean setP();
+boolean setI();
+boolean setD();
 boolean resetSystem();
 boolean dimDisplay(); // brightness controll
 boolean toggleOLEDDimOn();
@@ -19,6 +22,7 @@ boolean stopPhoneySpeedPower();
 boolean gotoMainMenu();
 boolean gotoSettingsMenu();
 boolean gotoOnOffMenu();
+boolean gotoPIDMenu();
 boolean gotoDebugMenu();
 
 int getbtnPressed();
@@ -126,7 +130,7 @@ MenuItem PROGMEM settingsMenu[8] = {
   { "Set Weight", setWeight }
   , { "Set Wheel Size", setWheelSize }
   , { "Auto-level", autoLevelTrainerIncline }
-  , { "Motor PID", setPIDParms }
+  , { "Motor PID", gotoPIDMenu }
   , { "Display", gotoOnOffMenu }
   , { "Reset", resetSystem }
   , { "Debug Mode", gotoDebugMenu }
@@ -139,6 +143,13 @@ MenuItem PROGMEM onOffMenu[3] = {
   , { "<Back>", gotoSettingsMenu }
 };
 
+MenuItem PROGMEM pidParmsMenu[4] = {
+  { "Proportional", setP }
+  , { "Integral", setI }
+  , { "Derivative", setD }
+  , { "<Back>", gotoSettingsMenu }
+};
+
 MenuItem PROGMEM debugMenu[3] = {
 
   { "sim 15kpm,210W", startPhoneySpeedPower }
@@ -146,10 +157,11 @@ MenuItem PROGMEM debugMenu[3] = {
   , { "<Back>", gotoSettingsMenu }
 };
 
-MenuList list1(mainMenu, 2);
-MenuList list2(settingsMenu, 8);
-MenuList list3(onOffMenu, 3);
-MenuList list4(debugMenu, 3);
+MenuList mainMenuList(mainMenu, 2);
+MenuList settingsMenuList(settingsMenu, 8);
+MenuList onOffMenuList(onOffMenu, 3);
+MenuList pidParmsMenuList(pidParmsMenu, 4);
+MenuList debugMenuList(debugMenu, 3);
 
 SimpleSerialMenu myMenu;
 
@@ -163,21 +175,24 @@ SimpleSerialMenu myMenu;
  ******************************
  *****************************/
 boolean gotoMainMenu() {
-  myMenu.setCurrentMenu(&list1);
+  myMenu.setCurrentMenu(&mainMenuList);
   return true;
 }
 
 boolean gotoSettingsMenu() {
-  myMenu.setCurrentMenu(&list2);
+  myMenu.setCurrentMenu(&settingsMenuList);
   return true;
 }
 
 boolean gotoOnOffMenu() {
-  myMenu.setCurrentMenu(&list3);
+  myMenu.setCurrentMenu(&onOffMenuList);
   return true;
 }
-
+boolean gotoPIDMenu() {
+    myMenu.setCurrentMenu(&pidParmsMenuList);
+  return true;
+}
 boolean gotoDebugMenu() {
-  myMenu.setCurrentMenu(&list4);
+  myMenu.setCurrentMenu(&debugMenuList);
   return true;
 }

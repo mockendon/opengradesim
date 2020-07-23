@@ -425,7 +425,7 @@ bool setNumber(int& val, int valMin, int valMax, int increment)
   return firstTime;
 }
 
-int adjustDouble(double val, double origVal, double valMin, double maxvalMax, double increment, const __FlashStringHelper* fmtStr)
+double adjustDouble(double val, double origVal, double valMin, double maxvalMax, double increment)
 {
 
   switch (btnPressed) {
@@ -468,7 +468,7 @@ bool setDouble(double& val, double valMin, double valMax, double increment)
       switch (valIsSet)
       {
         case false:
-          val = adjustNumber( val, origVal, valMin, valMax, increment );
+          val = adjustDouble( val, origVal, valMin, valMax, increment );
           break;
         case true:
           firstTime = true;

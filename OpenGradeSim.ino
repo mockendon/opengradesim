@@ -50,7 +50,6 @@
 Sabertooth ST(128); // The Sabertooth is on address 128.
 
 // Declare our filters
-
 MovingAverageFilter movingAverageFilter_x(9);        //
 MovingAverageFilter movingAverageFilter_y(9);        // Moving average filters for the accelerometers
 MovingAverageFilter movingAverageFilter_z(9);        //
@@ -60,40 +59,40 @@ MovingAverageFilter movingAverageFilter_speed(2);    // 0.5 second speed average
 // For incline declare some variables and set some default values
 
 long previousMillis = 0;          // last time in ms
-long weightPrevMillis = 0;        // last time for weight setting
-long weightMillis = 5000;         // time for weight setting
-long actuatorMillis = 0;          // time for moving the actuator
 float smoothRadPitch = 0;         // variable for the pitch
 int trainerIncline = 0;           // variable for the % trainerIncline (actual per accelerometers)
-double trainerInclineZeroAdj = 0; // inline adjustment from auto zero trainer incline
+double trainerInclineZeroOffset = 0; // inline adjustment from auto zero trainer incline
 double targetGrade = 0;           // variable for the calculated grade (aim)
 double manualTargetGrade = 0;
-bool controllerLeveled = false;
+bool trainerLeveled = false;
+
+// motor pid params
+double Kp_avg = 0, Ki_avg = 0, Kd_avg = 0;
+double Kp_avg_adj = 0.0, Ki_avg_adj = 0.00, Kd_avg_adj = 0.0;
 
 MovingAverageFilter movingAverageFilter_Kp(8);    // 2 second power average at 4 samples per sec
 MovingAverageFilter movingAverageFilter_Ki(8);    // 2 second power average at 4 samples per sec
 MovingAverageFilter movingAverageFilter_Kd(8);    // 2 second power average at 4 samples per sec
 
-double Kp_avg = 0.0, Ki_avg = 0, Kd_avg = 0.0;
-
-// motor pid params
-
-double Kp = 0.0;                              // PID proportional control Gain
-double Ki = 0.00;
-double Kd = 0.0;
-bool pidParmsIsSet = false;
 double trainerInclineErr = 0;
+double Z0 = 0; // lowest point the trainer can reach.
+
 double motorPWM = 0;
 double prev_SaberSpeed = 0;
 //PID       (&Input,             &Output,   &Setpoint,    Kp, Ki, Kd, Direction, Mode)
 PID motorPID(&trainerInclineErr, &motorPWM, &targetGrade, Kp_avg, Ki_avg, Kd_avg, DIRECT);
 
 // user settings
-
+// TODO: convert to array of user profiles. Add bikeID and Desc to allow multiple user/bike profiles.
 typedef struct {
   boolean valid;
   int riderWeight;
   int wheelCircCM;
+  int trainerInclineZeroOffset;
+  double Kp_avg_adj;
+  double Ki_avg_adj;
+  double Kd_avg_adj;
+
 } UserSettings;
 
 UserSettings userSettings;
@@ -157,8 +156,7 @@ void setup() {
   pinMode (resetPin, OUTPUT);
   digitalWrite (resetPin, HIGH);
 
-  Serial.begin(9600);
-
+  // init OLED display
   initOLED();
 
   // Check that the accelerometer is up and running else reset
@@ -166,15 +164,14 @@ void setup() {
     Serial.println("Failed to initialize IMU!");
     resetSystem();
   }
-  // else {
-  //    // auto zero trainer incline
-  //    autoLevelTrainerIncline();
-  //  }
+
+  initUserSettings();
 
   //turn the motor PID controller on
   motorPID.SetMode(AUTOMATIC);
-  //motorPID.SetOutputLimits(0, 255); // This is the default range. Try making this -127, 127 and get rid of the contraint and mapping
-  motorPID.SetOutputLimits(0, 127); // This is the default range. Try making this -127, 127 and get rid of the contraint and mapping
+  motorPID.SetOutputLimits(0, 127); // set to 1/2 the saberTooth serial range. (forward range only)
+  getPIDSettings(); // contains user adjusted PID settings
+  motorPID.SetTunings(Kp_avg, Ki_avg, Kd_avg);
 
   // begin BLE initialization reset if fails
   if (!BLE.begin()) {
@@ -184,15 +181,13 @@ void setup() {
     resetSystem();
   }
 
-  initUserSettings();
-
   biColorLED(true, true); // red to green
-  myMenu.setCurrentMenu(&list1);
+  myMenu.setCurrentMenu(&mainMenuList);
 }
 
 ////////////////////////////////  loop  ///////////////////////////////////////
 
-bool debugging = false;
+bool debugging = true;
 
 void loop() {
 
@@ -215,22 +210,15 @@ boolean gradeSim() {
   static long previousSpeedandPowerMillis = 0;
   static bool firstTime = true;
 
-  if (!controllerLeveled) {
-    autoLevelTrainerIncline();
+  if (!trainerLeveled) {
+    //autoLevelTrainerIncline();
+    levelTrainer();
     return false;
   }
-
-  Serial.print("inManualMode: "); Serial.print(inManualMode);
-  Serial.print(", selectBtnPressed: "); Serial.print(selectBtnPressed());
-  Serial.print(", upDownBtnPressed: "); Serial.print(upDownBtnPressed());
-  Serial.print(", btnPressed:"); Serial.print(getbtnPressed());
-  Serial.print(", firstTime:"); Serial.print(firstTime);
-  Serial.println("");
-
+  
   if (inManualMode)
   {
     setDouble(targetGrade, 1, 45, 1); // check for manual changes in grade
-
     if (selectBtnPressed())
     {
       inManualMode = false;
@@ -240,12 +228,13 @@ boolean gradeSim() {
     if (firstTime)
     {
       firstTime = false;
-      return false; // skipping first cycle to ignore the selectBtnPressed that got us here.
+      return false; // skipping first cycle to ignore the selectBtnPressed that started gradeSim
     }
     // smart trainer mode
     if (selectBtnPressed())
     {
-      Serial.println("exiting gradeSim");
+      //Serial.println("exiting gradeSim");
+      trainerLeveled = false; // hack
       firstTime = true; // reset for next entry
       return true; // exit gradeSim loop
     } else {
@@ -276,7 +265,7 @@ boolean gradeSim() {
     calculateTargetGrade(); // Use power and speed to calculate the targetGrade
   }
 
-  findTrainerIncline(true); // read the accelerometer to find auto-level adjusted trainerIncline
+  trainerIncline = findTrainerIncline(true); // read the accelerometer to find auto-level adjusted trainerIncline
   trainerInclineErr = -abs(targetGrade - trainerIncline); // make err negative if it isnt already.
 
   //Serial.print(" inclineErr:");
@@ -290,11 +279,294 @@ boolean gradeSim() {
   gradeSimDisplay();
 
   // Update the actuator positon only if the trainer is in use
-  if ((powerTrainer > 40) && (speedTrainer > 5))
+  //if ((powerTrainer > 40) && (speedTrainer > 5))
   {
     moveActuator();
   }
 
+}
+
+void stopActuator(void) {
+  ST.motor(1, 0);
+}
+void raiseActuator(void) {
+  ST.motor(1, 127);
+}
+void lowerActuator(void) {
+  ST.motor(1, -127);
+}
+
+void moveActuator(void)
+{
+  int SaberSpeed = motorPWM;
+  //int pwm = constrain(motorPWM, 0, 255);
+  //int SaberSpeed = map(pwm, 0, 255, 0, 127); // mapping default pid pwm speeds to SaberTooth SimpleSerial cmds (1 - 127)
+
+  if (SaberSpeed != prev_SaberSpeed) {
+    prev_SaberSpeed = SaberSpeed;
+
+    //    if (abs(SaberSpeed)  < 50) {
+    //      analogWrite(PWM_M1, 0); // turn off motors
+    //    }
+
+    if (trainerIncline > targetGrade) {
+      SaberSpeed = -abs(SaberSpeed); // flip direction if trainer is below target
+    }
+
+    ST.motor(1, SaberSpeed);
+  }
+
+}
+
+void moveActuator1(void) {
+
+  // This method is ugly - just pausing the script while the actuator moves - there are many better ways - if only I had the time!
+  // That said there will be more noise whilst moving so maybe some advantage
+  int SaberSpeed = 75; //
+  int difference = trainerIncline - targetGrade; // Find the difference
+  int absDifference = abs(difference);        // Find the absolute (like rms)
+
+  if (trainerIncline < targetGrade) {
+    SaberSpeed = -abs(SaberSpeed); // flip direction if trainer is below target
+  }
+
+  ST.motor(1, SaberSpeed);
+
+  if ((absDifference > 0) && (absDifference < 2)) {
+    delay(50);
+  }
+  if ((absDifference >= 2) && (absDifference < 3)) {
+    delay(200);
+  }
+  if ((absDifference >= 3) && (absDifference < 4)) {
+    delay(750);
+  }
+  if (absDifference >= 4) {
+    delay(1000);
+  }
+
+  ST.motor(1, 0); // shut motor off
+
+}
+
+bool lowerTrainer()
+{
+  static bool firstTime = true;
+  static double prevIncline = 0;
+  static long previousMillis = 0;
+  long currentMillis = millis();
+  char buf[70];
+
+  if (firstTime)
+  {
+    firstTime = false;
+    prevIncline = trainerIncline;
+    lowerActuator(); // start lowering the trainer
+    sprintf_P(buf, PSTR("lowering..."), trainerIncline);
+    displayLineLeft(1, 12, 1, buf);
+    displayLineLeft(2, 24, 1, " "); // erase the unused line
+
+    return false;
+  }
+
+  if (prevIncline != trainerIncline) { // still moving down so reset the wait clock
+    sprintf_P(buf, PSTR("still lowering %d, %d"), trainerIncline, prevIncline);
+    Serial.println(buf);
+    //Serial.print("still lowering...");
+    prevIncline = trainerIncline;
+    previousMillis = currentMillis;
+    return false;
+  } else {
+    if (currentMillis - previousMillis >= WAIT_FOR_ACTUATOR_STOP_MIL) // and we have been stopped for WAIT_ACTUATOR_STOP_MIL
+    {
+      // we have have stopped moving for at least WAIT_FOR_ACTUATOR_STOP_MIL
+      //Z0 = trainerIncline; // record the current incline as the lowest point Z0.
+      targetGrade = trainerInclineZeroOffset; // initialize the starting point grade with user settings if avail.
+      previousMillis = 0; // reset stuff for next time.
+
+      // Serial.println("trainer is lowered");
+      sprintf_P(buf, PSTR("adjust bike level."), trainerIncline);
+      displayLineLeft(1, 12, 1, buf);
+      displayLineLeft(2, 24, 1, " "); // erase the unused line
+
+      firstTime = true;
+      return true;
+    }
+
+  }
+}
+
+
+bool levelTrainer() {
+
+  static boolean firstTime = true;
+  static boolean trainerLowered = false;
+  long currentMillis = millis();
+
+  trainerIncline = findTrainerIncline(true); // reading the trainer incline
+
+  if (!trainerLowered)
+  {
+    trainerLowered = lowerTrainer();
+    getPIDSettings(); // one time
+    return false;
+  }
+
+  setDouble(targetGrade, 1, 45, 1); // check for manual changes in grade
+
+  if (selectBtnPressed())
+  {
+   
+    int rawIncline = findTrainerIncline(false);
+    trainerInclineZeroOffset = trainerIncline; // record the adjustment
+    //trainerInclineZeroOffset = (rawIncline - trainerIncline); // store the grade offset required to re-level the trainer
+    updateUserSettings();
+    stopActuator();
+    trainerLowered = false;
+    trainerLeveled = true;
+    firstTime = true;
+    
+    return false;
+  }
+
+  trainerInclineErr = -abs(targetGrade - trainerIncline); // make err negative if it isnt already.
+
+  Serial.print(" targetGrade (setpoint):");
+  Serial.print(targetGrade);
+  Serial.print(" inclineErr (input):");
+  Serial.print(trainerInclineErr);
+  Serial.print(" pwm (output):");
+  Serial.print(motorPWM);
+  Serial.print(" Kp_avg:");
+  Serial.print(Kp_avg);
+  Serial.print(" Ki_avg:");
+  Serial.print(Ki_avg);
+  Serial.print(" Kd_avg:");
+  Serial.print(Kd_avg);
+
+  Serial.println();
+
+
+  motorPID.Compute(); // Use target angle and trainer angle to calc the motor pwm value.
+
+  // Display the current data
+  gradeSimDisplay();
+
+  moveActuator();
+  return false;
+}
+
+bool autoLevelTrainerIncline() {
+  /* Samples the controler head grade n times and saves it as a correction offset to be applied when calculating bike grade.
+  Press any key to exit without updating. Could be modified to give up auto-level and accept current offset. */
+
+
+  //Serial.print("auto leveling trainer.");
+  static int sampleTimes = 0;
+  static int previousSample = 0;
+  const int n = 30;
+  trainerIncline = findTrainerIncline(false);
+
+  switch (sampleTimes)
+  {
+    case 0:
+      previousSample = trainerIncline;
+    default:
+
+      if (trainerIncline == previousSample)
+      {
+        sampleTimes++;
+      } else {
+        sampleTimes = 0; // start over
+      }
+      previousSample = trainerIncline;
+
+      char buf[20];
+      //sprintf_P(buf, PSTR("offset:%d%%"), trainerIncline);
+      sprintf_P(buf, PSTR("hold still..."), trainerIncline);
+      displayLineLeft(1, 12, 1, buf);
+      displayLineLeft(2, 24, 1, " "); // erase the unused line
+
+      bargraph(0, 27, sampleTimes * (128 / n), 6);
+      //return false;
+      if (pressAnyButtonToExit())
+      {
+        sampleTimes = previousSample = 0;
+        return true;
+      }
+      break;
+    case n: // must be same angle n times in a row to auto-stop
+      trainerInclineZeroOffset = trainerIncline; // record the adjustment
+      sampleTimes = 0; // reset for next time.
+      trainerLeveled = true;
+      return true;
+      break;
+  }
+
+}
+
+int findTrainerIncline(bool adjusted) {
+  // when adjusted, trainerInclineZeroOffset is subtracted from trainerIncline.
+  float rawx, rawy, rawz;
+  float x, y, z;
+  int trainerIncline = 0;
+
+  if (IMU.accelerationAvailable()) {
+    IMU.readAcceleration(rawx, rawy, rawz);
+
+    x = movingAverageFilter_x.process(rawx);      //
+    y = movingAverageFilter_y.process(rawy);      //   Apply moving average filters to reduce noise
+    z = movingAverageFilter_z.process(rawz);      //
+
+    //    char buf[80];
+    //    sprintf_P(buf, PSTR("IMU x:%d y:%d z:%d"), x, y, z);
+
+    // find pitch in radians
+    float radpitch = atan2(( y) , sqrt(x * x + z * z));
+
+    smoothRadPitch = radpitch;
+
+    // find the % grade from the pitch
+    trainerIncline = tan(smoothRadPitch) * 100;
+
+    trainerIncline = trainerIncline * -1; // flip the sign since its mounted with the USB port on the left.
+
+    if (adjusted)
+    {
+      trainerIncline = trainerIncline - trainerInclineZeroOffset;
+    }
+    //    char buf[5];
+    //    sprintf_P(buf, PSTR("IMU trainer incline:%d"), trainerIncline);
+    //    Serial.println(buf);
+
+    return trainerIncline;
+  }
+}
+
+void calculateTargetGrade(void) {
+  float speed28 = pow(speedTrainer, 2.8);                                             // pow() needed to raise y^x where x is decimal
+  resistanceWatts = (0.0102 * speed28) + 9.428;                                       // calculate power from rolling / wind resistance
+  powerMinusResistance = powerTrainer - resistanceWatts;                              // find power from climbing
+  //Serial.print("powerMinusResistance:");
+  //Serial.print(powerMinusResistance);
+
+  speedMpersec = speedTrainer / 3.6;                                                  // find speed in SI units. 1 meter / second (m/s) is equal 3.6 kilometers / hour (km/h)
+  if (speedMpersec == 0)
+  {
+    targetGrade = 0;
+  }
+  else
+  {
+    targetGrade = ((powerMinusResistance / (riderWeight * 9.8)) / speedMpersec) * 100; // calculate grade of climb in %
+  }
+
+  // Limit upper and lower grades
+  if (targetGrade < -10) {
+    targetGrade = -10;
+  }
+  if (targetGrade > 20) {
+    targetGrade = 20;
+  }
 }
 
 void gradeSimDisplay()
@@ -325,13 +597,16 @@ void gradeSimDisplay()
   displayTextRight (1, 9, 6, 7, 2, buf);
 
   // --   row 3 --
-  sprintf_P(buf, PSTR("%d kg"), riderWeight); // Display weight bottom left
-  //sprintf_P(buf, PSTR("%d pwm"), motorPWM); // Display motor PWM bottom left
+  //sprintf_P(buf, PSTR("%d kg"), riderWeight); // Display weight bottom left
+  sprintf_P(buf, PSTR("%.2g%% pwm"), motorPWM); // Display motor PWM bottom left
   //displayTextLeft( row,  rowPos,  startcol,  colwidth,  textsize, message )
   displayTextLeft (2, 24, 0, 6, 1, buf);
 
   // Display manual or smart trainer incline bottom right
-  if (inManualMode) {
+  if (!trainerLeveled)
+  {
+    sprintf_P(buf, PSTR("Adjust %.2g%%"), targetGrade); // Display targetGrade bottom right
+  } else if (inManualMode) {
     sprintf_P(buf, PSTR("Manual %.2g%%"), targetGrade); // Display targetGrade bottom right
   } else {
     sprintf_P(buf, PSTR("Trainer %.2g%%"), targetGrade); // Display targetGrade bottom right
@@ -432,33 +707,10 @@ void getsubscribedtoSensor(BLEDevice cablePeripheral) {
 
   if (!powerCharacteristic.subscribe()) {
     Serial.println("can not subscribe to speed and power");
-
-    //    // outcome display on OLED
-    //    OLED.setTextSize(1);
-    //    OLED.setTextColor(SSD1306_WHITE);
-    //    OLED.setCursor(5, 10);
-    //    OLED.print(F("Subscribe FAILED"));
-    //    OLED.setCursor(5, 20);
-    //    OLED.print(F("Speed and Power"));
-    //    OLED.display();
-    //    OLED.clearDisplay();
-
     delay(5000);
     resetSystem();
-
   } else {
     Serial.println("subscribed to speed and power");
-
-    //    // outcome display on OLED
-    //    OLED.setTextSize(1);
-    //    OLED.setTextColor(SSD1306_WHITE);
-    //    OLED.setCursor(5, 10);
-    //    OLED.print(F("Subscribed to"));
-    //    OLED.setCursor(5, 20);
-    //    OLED.print(F("Speed and Power"));
-    //    OLED.display();
-    //    OLED.clearDisplay();
-
   };
 
   //  The time consuming BLE setup is done.
@@ -481,19 +733,10 @@ void refreshSpeedandPower(void) {
     byte rawpowerValue2 = holdpowervalues[2];       // power least sig byte in HEX
     byte rawpowerValue3 = holdpowervalues[3];       // power most sig byte in HEX
 
-    long rawpowerTotal = (rawpowerValue2 + (rawpowerValue3 * 256));
-
-    Serial.print("Power: ");
-    Serial.println(rawpowerTotal);
+    long rawpowerTotal = (rawpowerValue2 + (rawpowerValue3 * 256)); // Serial.print("Power: "); Serial.println(rawpowerTotal);
 
     // Use moving average filter to give '3s power'
     powerTrainer = movingAverageFilter_power.process(rawpowerTotal);
-
-    //    Serial.print("rawpowerValue2: ");
-    //    Serial.println(rawpowerValue2);
-    //    Serial.print("rawpowerValue3: ");
-    //    Serial.println(rawpowerValue3);
-
   }
 
   // Get speed - a bit more complication as the GATT specification calls for Cumulative Wheel Rotations and Time since wheel event
@@ -558,89 +801,6 @@ void refreshSpeedandPower(void) {
     }
 
   }
-
-}
-
-bool autoLevelTrainerIncline() {
-  /* Samples the controler head grade n times and saves it as a correction offset to be applied when calculating bike grade.
-     Press any key to exit without updating. Could be modified to give up auto-level and accept current offset. */
-
-
-  Serial.print("auto leveling trainer.");
-  static int sampleTimes = 0;
-  static int previousSample = 0;
-  const int n = 30;
-  findTrainerIncline(false);
-
-  switch (sampleTimes)
-  {
-    case 0:
-      previousSample = trainerIncline;
-    default:
-
-      if (trainerIncline == previousSample)
-      {
-        sampleTimes++;
-      } else {
-        sampleTimes = 0; // start over
-      }
-      previousSample = trainerIncline;
-
-      char buf[20];
-      //sprintf_P(buf, PSTR("offset:%d%%"), trainerIncline);
-      sprintf_P(buf, PSTR("hold still..."), trainerIncline);
-      displayLineLeft(1, 12, 1, buf);
-      displayLineLeft(2, 24, 1, " "); // erase the unused line
-
-      bargraph(0, 27, sampleTimes * (128 / n), 6);
-      //return false;
-      if (pressAnyButtonToExit())
-      {
-        sampleTimes = previousSample = 0;
-        return true;
-      }
-      break;
-    case n: // must be same angle n times in a row to auto-stop
-      trainerInclineZeroAdj = trainerIncline; // record the adjustment
-      sampleTimes = 0; // reset for next time.
-      controllerLeveled = true;
-      return true;
-      break;
-  }
-
-}
-
-void findTrainerIncline(bool adjusted) {
-  float rawx, rawy, rawz;
-  float x, y, z;
-
-  if (IMU.accelerationAvailable()) {
-    IMU.readAcceleration(rawx, rawy, rawz);
-
-    x = movingAverageFilter_x.process(rawx);      //
-    y = movingAverageFilter_y.process(rawy);      //   Apply moving average filters to reduce noise
-    z = movingAverageFilter_z.process(rawz);      //
-
-    //    char buf[80];
-    //    sprintf_P(buf, PSTR("IMU x:%d y:%d z:%d"), x, y, z);
-
-    // find pitch in radians
-    float radpitch = atan2(( y) , sqrt(x * x + z * z));
-
-    smoothRadPitch = radpitch;
-
-    // find the % grade from the pitch
-    trainerIncline = tan(smoothRadPitch) * 100;
-
-    trainerIncline = trainerIncline * -1; // flip the sign since its mounted with the USB port on the left.
-
-    if (adjusted == true)
-    {
-      trainerIncline = trainerIncline - trainerInclineZeroAdj;
-    }
-    //sprintf_P(buf, PSTR("IMU trainer incline:%d"), trainerIncline);
-    //Serial.println(buf);
-  }
 }
 
 bool resetSystem(void) {
@@ -649,7 +809,49 @@ bool resetSystem(void) {
   return true;
 }
 
+bool setP(void)
+{
+  //bool setDouble(double& val, double valMin, double valMax, double increment)
+  if (setDouble(Kp_avg_adj, 0.0, 10, .1))
+  {
+    motorPID.SetTunings(Kp_avg, Ki_avg, Kd_avg);
+    updateUserSettings();
+    return true;
+  } else {
+    getPIDSettings();
+    displayPIDParmVals();
+    return false;
+  }
+}
 
+bool setI(void)
+{
+
+  if (setDouble(Ki_avg_adj, 0.0, 10, 0.01))
+  {
+    motorPID.SetTunings(Kp_avg, Ki_avg, Kd_avg);
+    updateUserSettings();
+    return true;
+  } else {
+    getPIDSettings();
+    displayPIDParmVals();
+    return false;
+  }
+}
+bool setD(void)
+{
+
+  if (setDouble(Kd_avg_adj, 0.0, 10, 0.1))
+  {
+    motorPID.SetTunings(Kp_avg, Ki_avg, Kd_avg);
+    updateUserSettings();
+    return true;
+  } else {
+    getPIDSettings();
+    displayPIDParmVals();
+    return false;
+  }
+}
 bool setWeight(void)
 {
   if (setNumber(riderWeight, 1, 1000, 1))
@@ -674,12 +876,6 @@ bool setWheelSize(void)
   }
 }
 
-bool setGrade(void)
-{
-  setDouble(targetGrade, 1, 45, 1);
-  displayDouble(targetGrade, F("%"));
-}
-
 boolean startPhoneySpeedPower()
 {
   debugging = true;
@@ -699,107 +895,37 @@ void saberToothSetup()
   ST.autobaud(); // Send the autobaud command to the Sabertooth controller(s).
 }
 
-void moveActuator(void)
-{
-  int SaberSpeed = motorPWM;
-  //int pwm = constrain(motorPWM, 0, 255);
-  //int SaberSpeed = map(pwm, 0, 255, 0, 127); // mapping default pid pwm speeds to SaberTooth SimpleSerial cmds (1 - 127)
-  if (SaberSpeed != prev_SaberSpeed) {
-    prev_SaberSpeed = SaberSpeed;
-
-    //    if (abs(SaberSpeed)  < 50) {
-    //      analogWrite(PWM_M1, 0); // turn off motors
-    //    }
-
-    if (trainerIncline < targetGrade) {
-      SaberSpeed = -abs(SaberSpeed); // flip direction if trainer is below target
-    }
-    ST.motor(1, SaberSpeed);
-  }
-
-  //Serial.print("SaberSpeed: ");
-  //Serial.print(SaberSpeed);
-}
-
-//void moveActuator(void) {
-//
-//  if (motorPWM != prev_motorPWM) {
-//    prev_motorPWM = motorPWM;
-//    if (abs(motorPWM)  < 50) {
-//      // turn off motors
-//      digitalWrite(actuatorOutPin1, LOW);
-//      digitalWrite(actuatorOutPin2, LOW);
-//    }
-//    else if (trainerIncline < targetGrade) { // trainer below target. move up.
-//      digitalWrite(actuatorOutPin1, LOW);
-//      digitalWrite(actuatorOutPin2, HIGH);
-//    } else {                                // trainer above target. move down.
-//      digitalWrite(actuatorOutPin1, HIGH);
-//      digitalWrite(actuatorOutPin2, LOW);
-//    }
-//
-//    analogWrite(enA, motorPWM);
-//
-//  }
-//}
-
-
-void calculateTargetGrade(void) {
-  float speed28 = pow(speedTrainer, 2.8);                                             // pow() needed to raise y^x where x is decimal
-  resistanceWatts = (0.0102 * speed28) + 9.428;                                       // calculate power from rolling / wind resistance
-  powerMinusResistance = powerTrainer - resistanceWatts;                              // find power from climbing
-  //Serial.print("powerMinusResistance:");
-  //Serial.print(powerMinusResistance);
-
-  speedMpersec = speedTrainer / 3.6;                                                  // find speed in SI units. 1 meter / second (m/s) is equal 3.6 kilometers / hour (km/h)
-  if (speedMpersec == 0)
-  {
-    targetGrade = 0;
-  }
-  else
-  {
-    targetGrade = ((powerMinusResistance / (riderWeight * 9.8)) / speedMpersec) * 100; // calculate grade of climb in %
-  }
-
-  // Limit upper and lower grades
-  if (targetGrade < -10) {
-    targetGrade = -10;
-  }
-  if (targetGrade > 20) {
-    targetGrade = 20;
-  }
-}
-
-boolean setPIDParms()
-{
-  getPIDSettings();
-  displayPIDParmVals();
-  return pressAnyButtonToExit();
-}
-
 void displayPIDParmVals(void) {
   // Display PID values
-  // TODO: Add ability to modify values and save to user settings.
   char buf[20];
-  sprintf_P(buf, PSTR("%.2g, %.2g, %.2g"), Kp_avg, Ki_avg, Kd_avg);
+  sprintf_P(buf, PSTR("%.2g, %.2g, %.2g"), Kp_avg, Ki_avg , Kd_avg);
   displayLineLeft(1, 12, 1, buf);
   displayLineLeft(2, 24, 1, " "); // erase the unused lines
 }
 
 void getPIDSettings() {
-  // get PID setting from POTS and average them.
-  Kp = analogRead(A3) * 0.004;     // Serial.print("  Kp = "); Serial.print(kp);
-  Kp_avg = movingAverageFilter_Kp.process(Kp); // Serial.print("  Kp_avg = "); Serial.print(Kp_avg);
+  // get PID setting from POTS + user adjustments and average them.
 
-  Ki = analogRead(A2) * 0.0005;  // Serial.print("  Ki = "); Serial.print(ki);
-  Ki_avg = movingAverageFilter_Ki.process(Ki); //Serial.print("  Ki_avg = "); Serial.print(Ki_avg);
+  //Kp = analogRead(A3) * 0.004;     // Serial.print("  Kp = "); Serial.print(kp);
+  Kp_avg = 1.0 + Kp_avg_adj;
+  //Kp_avg = movingAverageFilter_Kp.process(Kp + Kp_avg_adj); // Serial.print("  Kp_avg = "); Serial.print(Kp_avg);
+  //Kp_avg = movingAverageFilter_Kp.process(Kp);
 
-  Kd = analogRead(A1) * .001;     // Serial.print("  Kd = "); Serial.print(kd);
-  Kd_avg = movingAverageFilter_Kd.process(Kd);  //Serial.print("  Kd_avg = "); Serial.println(Kd_avg);
-  motorPID.SetTunings(Kp_avg, Ki_avg, Kd_avg);
-  //  Serial.println(Kp_avg);
-  //  Serial.println(Ki_avg);
-  //  Serial.println(Kd_avg);
+  //Ki = analogRead(A2) * 0.0005;  // Serial.print("  Ki = "); Serial.print(ki);
+  Ki_avg = 0 + Ki_avg_adj;
+  //Ki_avg = movingAverageFilter_Ki.process(Ki + Ki_avg_adj); //Serial.print("  Ki_avg = "); Serial.print(Ki_avg);
+  //Ki_avg = movingAverageFilter_Ki.process(Ki); //Serial.print("  Ki_avg = "); Serial.print(Ki_avg);
+
+  //Kd = analogRead(A1) * .001;     // Serial.print("  Kd = "); Serial.print(kd);
+  Kd_avg = 0 + Kd_avg_adj;
+  //Kd_avg = movingAverageFilter_Kd.process(Kd + Kd_avg_adj); //Serial.print("  Kd_avg = "); Serial.println(Kd_avg);
+  //Kd_avg = movingAverageFilter_Kd.process(Kd); //Serial.print("  Kd_avg = "); Serial.println(Kd_avg);
+
+  Serial.print("  Kd_avg_adj = "); Serial.print(Kp_avg_adj);
+  Serial.print("  Ki_avg_adj = "); Serial.print(Ki_avg_adj);
+  Serial.print("  Kd_avg_adj = "); Serial.print(Kd_avg_adj);
+
+  //motorPID.SetTunings(Kp_avg, Ki_avg, Kd_avg);
 }
 
 void initUserSettings()
@@ -816,12 +942,20 @@ void initUserSettings()
 
   riderWeight = userSettings.riderWeight;
   wheelCircCM = userSettings.wheelCircCM;
+  trainerInclineZeroOffset = userSettings.trainerInclineZeroOffset;
+  Kp_avg_adj = userSettings.Kp_avg_adj;
+  Ki_avg_adj = userSettings.Ki_avg_adj;
+  Kd_avg_adj = userSettings.Kd_avg_adj;
 }
 
 void updateUserSettings()
 {
   userSettings.riderWeight = riderWeight;
   userSettings.wheelCircCM = wheelCircCM;
+  userSettings.trainerInclineZeroOffset = trainerInclineZeroOffset;
+  userSettings.Kp_avg_adj = Kp_avg_adj;
+  userSettings.Ki_avg_adj = Ki_avg_adj;
+  userSettings.Kd_avg_adj = Kd_avg_adj;
   userSettings.valid = true;
   userSettings_FlashStore.write(userSettings);
 }
