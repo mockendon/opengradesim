@@ -318,7 +318,7 @@ void moveActuator(void)
   if (SaberSpeed != prev_SaberSpeed) {
     prev_SaberSpeed = SaberSpeed;
 
-    if (abs(SaberSpeed)  < 35) { // stop the motor if SaberSpeed is too small to move the actuator to prevent heating up the motor and welding the motors contacts.
+    if (abs(SaberSpeed)  < 25) { // stop the motor if SaberSpeed is too small to move the actuator to prevent heating up the motor and welding the motors contacts.
       SaberSpeed = 0;
     }
 
@@ -390,7 +390,11 @@ bool lowerTrainer()
       // stopped or possibly havent started moving yet
       if (currentMillis - previousMillis >= WAIT_FOR_ACTUATOR_STOP_MIL) // have been stopped for WAIT_ACTUATOR_STOP_MIL. fini!
       {
+        Serial.print(currentMillis - previousMillis);
+        Serial.print(" >= ");
+        Serial.println(WAIT_FOR_ACTUATOR_STOP_MIL);
         Serial.println("done lowering");
+        //trainerInclineZeroOffset = trainerIncline; // zero the display
         targetGrade = trainerIncline; // initialize the starting point grade
         previousMillis = 0; // reset stuff for next time.
         firstTime = true;
@@ -408,7 +412,7 @@ bool levelTrainer() {
   static boolean trainerLowered = false;
   long currentMillis = millis();
 
-  trainerIncline = findTrainerIncline(false); // reading the trainer incline
+  trainerIncline = findTrainerIncline(true); // reading the trainer incline
 
   if (!trainerLowered)
   {
@@ -441,19 +445,19 @@ bool levelTrainer() {
 
   gradeSimDisplay();  // Display the current data
 
-  Serial.print("levelTrainer targetGrade (setpoint):");
-  Serial.print(targetGrade);
-  Serial.print(" inclineErr (input):");
-  Serial.print(trainerInclineErr);
-  Serial.print(" pwm (output):");
-  Serial.print(motorPWM);
-  Serial.print(" Kp_avg:");
-  Serial.print(motorPID.GetKp());
-  Serial.print(" Ki_avg:");
-  Serial.print(motorPID.GetKi());
-  Serial.print(" Kd_avg:");
-  Serial.print(motorPID.GetKd());
-  Serial.println();
+//  Serial.print("levelTrainer targetGrade (setpoint):");
+//  Serial.print(targetGrade);
+//  Serial.print(" inclineErr (input):");
+//  Serial.print(trainerInclineErr);
+//  Serial.print(" pwm (output):");
+//  Serial.print(motorPWM);
+//  Serial.print(" Kp_avg:");
+//  Serial.print(motorPID.GetKp());
+//  Serial.print(" Ki_avg:");
+//  Serial.print(motorPID.GetKi());
+//  Serial.print(" Kd_avg:");
+//  Serial.print(motorPID.GetKd());
+//  Serial.println();
 
   return false;
 }

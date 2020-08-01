@@ -30,3 +30,23 @@ some filtering (moving average) to reduce this.
     
   3D files will be pulished on Thingiverse and more details on Instructables
   https://www.instructables.com/howto/Opengradesim/
+
+========================================================
+This branch implements the following changes -
+
+- The blocking motor control loop was replaced with a PID controller. This allows continual uninterrupted recalculation of the target grade.
+- Now allows negative grades.
+- Added ability to control the grade manually.
+- Added menu to UI. Starts at main menu now instead of jumping into grade simulation.
+- Rider weight and wheel circ. can be adjusted in UI and stored in flash storage. 
+
+
+Hardware changes
+----------------
+- Removed need for 3.3 to 5v level shifter by using sabertooth motor controller that accepts 3V signal inputs.
+- Sa btertooth motor controller replaced L298N H bridge
+- Larger PA-03 actuator from Dimension engineering to allow negative grades.
+- 3 button control instead of 2.
+- Custom circuit board. (Eagle files coming soon)
+
+Brian
