@@ -6,7 +6,7 @@
 boolean setWeight();
 boolean setWheelSize();
 boolean gradeSim();
-boolean levelTrainer();
+//void levelTrainer();
 boolean autoLevelTrainerIncline();
 boolean setPIDParms();
 boolean setP();

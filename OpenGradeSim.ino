@@ -89,7 +89,7 @@ typedef struct {
   boolean valid;
   int riderWeight;
   int wheelCircCM;
-  int trainerInclineZeroOffset;
+  double trainerInclineZeroOffset;
   double Kp_avg_adj;
   double Ki_avg_adj;
   double Kd_avg_adj;
@@ -111,7 +111,7 @@ float powerMinusResistance = 0;   // for calculation
 
 // For power and speed declare some variables and set some default values
 
-int wheelCircCM = 2070;           // Default val for wheel circumference in centimeters (700c 32 road wheel) 2300
+int wheelCircCM = 2070;           // Default val for wheel circumference in centimeters. 26×2.125 = 2017, (700c 32 road wheel) 2300
 long WheelRevs1;                  // For speed data set 1
 long Time_1;                      // For speed data set 1
 long WheelRevs2;                  // For speed data set 2
@@ -188,7 +188,7 @@ void setup() {
 
 ////////////////////////////////  loop  ///////////////////////////////////////
 
-bool debugging = true;
+bool debugging = false;
 
 void loop() {
 
@@ -205,85 +205,80 @@ void loop() {
 
 ////////////////////////   method declarations  ///////////////////////////////
 
-bool inManualMode = false;
+
+int trainerMode = 0; // levelTrainer=0 Manual=1, SmartTrainer=2
 
 boolean gradeSim() {
-  static long previousSpeedandPowerMillis = 0;
   static bool firstTime = true;
+  static bool trainerLeveled = false;
 
-  if (!trainerLeveled) {
-    //autoLevelTrainerIncline();
-    levelTrainer();
-    return false;
+  static long previousSpeedandPowerMillis = 0; // the last time we queried the SmartTrainer for Speed and Power
+
+  trainerIncline = findTrainerIncline();
+
+  if (selectBtnPressed())
+  {
+    switch (trainerMode)
+    {
+      case 0: // levelTrainer mode
+        if (firstTime)
+        {
+          firstTime = false;
+          targetGrade = trainerInclineZeroOffset == 0 ? trainerIncline : trainerInclineZeroOffset; // set target incline as current location if offset has never been set, otherwise use the stored offset
+          return false; // skipping first cycle to ignore the selectBtnPressed that got us here.
+        }
+        trainerInclineZeroOffset = trainerIncline;
+        updateUserSettings();
+      case 1: // manual mode
+        trainerMode = 2; // switching to smartTrainer mode
+        break;
+      case 2: // smartTrainer mode
+        trainerMode = 0; // force reveleveling each time gradeSim is started.
+        firstTime = true;
+        lowerActuator();
+        delay(5000); // allow time for actuator to lower.
+        stopActuator(); // turn off motor
+        return true; // exit gradeSim
+    }
   }
 
-  if (inManualMode)
+  switch (trainerMode)
   {
-    setDouble(targetGrade, 1, 45, 1); // check for manual changes in grade
-    if (selectBtnPressed())
-    {
-      inManualMode = false;
-      return false;
-    }
-  } else {
-    if (firstTime)
-    {
-      firstTime = false;
-      return false; // skipping first cycle to ignore the selectBtnPressed that started gradeSim
-    }
-    // smart trainer mode
-    if (selectBtnPressed())
-    {
-      //Serial.println("exiting gradeSim");
-      trainerLeveled = false; // hack
-      firstTime = true; // reset for next entry
-      return true; // exit gradeSim loop
-    } else {
-      if (upDownBtnPressed()) // switching to manual mode
+    case 0: // levelTrainer mode
+    case 1: // manual mode
+      setDouble(targetGrade, 1, 45, 1); // check for manual changes in grade
+      break;
+    case 2: // smartTrainer mode
+      if (upDownBtnPressed()) 
       {
-        inManualMode = true;
+        trainerMode = 1; // switching to manual mode
         return false;
       }
-    }
-
-    if (debugging)
-    {
-      powerTrainer = movingAverageFilter_power.process(210);
-      speedTrainer = movingAverageFilter_speed.process(15);
-    } else {
-      if (!cablePeripheral.connected())
+      if (debugging)
       {
-        getBLEServices(); // BLE setup
+        powerTrainer = movingAverageFilter_power.process(210);
+        speedTrainer = movingAverageFilter_speed.process(15);
+      } else {
+        if (!cablePeripheral.connected())
+        {
+          getBLEServices(); // BLE setup
+        }
+        // fetch new speed and power data from trainer 5 times a second.
+        long currentMillis = millis();
+        if (currentMillis - previousSpeedandPowerMillis >= 200)
+        {
+          previousSpeedandPowerMillis = currentMillis;
+          refreshSpeedandPower(); // Get any updated data
+        }
       }
-      // fetch new speed and power data from trainer 5 times a second.
-      long currentMillis = millis();
-      if (currentMillis - previousSpeedandPowerMillis >= 200)
-      {
-        previousSpeedandPowerMillis = currentMillis;
-        refreshSpeedandPower(); // Get any updated data
-      }
-    }
-    calculateTargetGrade(); // Use power and speed to calculate the targetGrade
+      calculateTargetGrade(); // Use power and speed to calculate the targetGrade
+      targetGrade = trainerInclineZeroOffset + targetGrade;
+      break;
   }
 
-  //  trainerIncline = findTrainerIncline(true); // read the accelerometer to find auto-level adjusted trainerIncline
-  //  trainerInclineErr = -abs(targetGrade - trainerIncline); // make err negative if it isnt already.
-  //
-  //  //Serial.print(" inclineErr:");
-  //  //Serial.println(trainerInclineErr);
-  //
-  //  getPIDSettings();
-  //  motorPID.Compute(); // Use target angle and trainer angle to calc the motor pwm value.
-
-  // Display the current data
-  gradeSimDisplay();
-
-  // Update the actuator positon only if the trainer is in use
-  //if ((powerTrainer > 40) && (speedTrainer > 5))
-  {
-    moveActuator();
-  }
-
+  moveActuator(); // Compute PWM and apply to motor
+  gradeSimDisplay(); // Display the current data
+  return false;
 }
 
 void stopActuator(void) {
@@ -302,14 +297,14 @@ void moveActuator(void)
 
   if (trainerInclineErr < -.5)
   {
-    Serial.println("far PID settings");
-    motorPID.SetTunings(2, 0, 0); //a ways to go. use agressive tunning
+    //Serial.println("far PID settings");
+    motorPID.SetTunings(2, 0, 0); // a ways to go. use agressive tunning
   } else {
-    Serial.println("close PID settings");
-    motorPID.SetTunings(.7, 0, 0); // pretty close. easy does it.
+    //Serial.println("close PID settings");
+    motorPID.SetTunings(.5, 0, 0); // pretty close. easy does it.
   }
 
-  motorPID.Compute(); // Use target angle and trainer angle and parm values to calc the motor pwm value.
+  motorPID.Compute(); // Use target angle, trainer angle, and PID parm values to calc the motor pwm value.
 
   int SaberSpeed = motorPWM;
   //int pwm = constrain(motorPWM, 0, 255);
@@ -318,7 +313,7 @@ void moveActuator(void)
   if (SaberSpeed != prev_SaberSpeed) {
     prev_SaberSpeed = SaberSpeed;
 
-    if (abs(SaberSpeed)  < 25) { // stop the motor if SaberSpeed is too small to move the actuator to prevent heating up the motor and welding the motors contacts.
+    if (abs(SaberSpeed) < 23) { // stop the motor if SaberSpeed is too small to move the actuator.
       SaberSpeed = 0;
     }
 
@@ -327,40 +322,21 @@ void moveActuator(void)
     }
 
     ST.motor(1, SaberSpeed);
-    Serial.println(SaberSpeed);
+    // Serial.println(SaberSpeed);
   }
-
-}
-
-void moveActuator1(void) {
-
-  // This method is ugly - just pausing the script while the actuator moves - there are many better ways - if only I had the time!
-  // That said there will be more noise whilst moving so maybe some advantage
-  int SaberSpeed = 75; //
-  int difference = trainerIncline - targetGrade; // Find the difference
-  int absDifference = abs(difference);        // Find the absolute (like rms)
-
-  if (trainerIncline < targetGrade) {
-    SaberSpeed = -abs(SaberSpeed); // flip direction if trainer is below target
-  }
-
-  ST.motor(1, SaberSpeed);
-
-  if ((absDifference > 0) && (absDifference < 2)) {
-    delay(50);
-  }
-  if ((absDifference >= 2) && (absDifference < 3)) {
-    delay(200);
-  }
-  if ((absDifference >= 3) && (absDifference < 4)) {
-    delay(750);
-  }
-  if (absDifference >= 4) {
-    delay(1000);
-  }
-
-  ST.motor(1, 0); // shut motor off
-
+//  Serial.print("levelTrainer targetGrade (setpoint):");
+//  Serial.print(targetGrade);
+//  Serial.print(" inclineErr (input):");
+//  Serial.print(trainerInclineErr);
+//  Serial.print(" pwm (output):");
+//  Serial.print(motorPWM);
+//  Serial.print(" Kp_avg:");
+//  Serial.print(motorPID.GetKp());
+//  Serial.print(" Ki_avg:");
+//  Serial.print(motorPID.GetKi());
+//  Serial.print(" Kd_avg:");
+//  Serial.print(motorPID.GetKd());
+//  Serial.println();
 }
 
 bool lowerTrainer()
@@ -405,63 +381,6 @@ bool lowerTrainer()
   return false;
 }
 
-
-bool levelTrainer() {
-
-  static boolean firstTime = true;
-  static boolean trainerLowered = false;
-  long currentMillis = millis();
-
-  trainerIncline = findTrainerIncline(true); // reading the trainer incline
-
-  if (!trainerLowered)
-  {
-    trainerLowered = lowerTrainer();
-    //getPIDSettings(); // one time
-    return false;
-  }
-
-  setDouble(targetGrade, 1, 45, 1); // check for manual changes in grade
-
-  if (selectBtnPressed())
-  {
-
-    trainerInclineZeroOffset = trainerIncline;  // store the grade offset required to re-level the trainer.
-    //int rawIncline = findTrainerIncline(false);
-    //trainerInclineZeroOffset = (rawIncline - trainerIncline);
-    Serial.print("levelTrainer trainerInclineZeroOffset:");
-    Serial.println(trainerInclineZeroOffset);
-
-    //updateUserSettings();
-    //stopActuator();
-    trainerLowered = false;
-    trainerLeveled = true;
-    firstTime = true;
-
-    return false;
-  }
-
-  moveActuator(); // Apply computed pwm to motors
-
-  gradeSimDisplay();  // Display the current data
-
-//  Serial.print("levelTrainer targetGrade (setpoint):");
-//  Serial.print(targetGrade);
-//  Serial.print(" inclineErr (input):");
-//  Serial.print(trainerInclineErr);
-//  Serial.print(" pwm (output):");
-//  Serial.print(motorPWM);
-//  Serial.print(" Kp_avg:");
-//  Serial.print(motorPID.GetKp());
-//  Serial.print(" Ki_avg:");
-//  Serial.print(motorPID.GetKi());
-//  Serial.print(" Kd_avg:");
-//  Serial.print(motorPID.GetKd());
-//  Serial.println();
-
-  return false;
-}
-
 bool autoLevelTrainerIncline() {
   /* Samples the controler head grade n times and saves it as a correction offset to be applied when calculating bike grade.
   Press any key to exit without updating. Could be modified to give up and accept current offset. */
@@ -470,7 +389,7 @@ bool autoLevelTrainerIncline() {
   static int sampleTimes = 0;
   static int previousSample = 0;
   const int n = 30;
-  trainerIncline = findTrainerIncline(false);
+  trainerIncline = findTrainerIncline();
 
   switch (sampleTimes)
   {
@@ -510,8 +429,7 @@ bool autoLevelTrainerIncline() {
 
 }
 
-int findTrainerIncline(bool adjusted) {
-  // when adjusted, trainerInclineZeroOffset is subtracted from trainerIncline.
+int findTrainerIncline() {
   float rawx, rawy, rawz;
   float x, y, z;
   int trainerIncline = 0;
@@ -535,17 +453,14 @@ int findTrainerIncline(bool adjusted) {
     trainerIncline = tan(smoothRadPitch) * 100;
 
     trainerIncline = trainerIncline * -1; // flip the sign since its mounted with the USB port on the left.
-
-    if (adjusted)
-    {
-      trainerIncline = trainerIncline - trainerInclineZeroOffset;
-    }
-    //    char buf[5];
-    //    sprintf_P(buf, PSTR("IMU trainer incline:%d"), trainerIncline);
-    //    Serial.println(buf);
-
-    return trainerIncline;
   }
+
+  //  char buf[5];
+  //  sprintf_P(buf, PSTR("findTrainerIncline: %d"), trainerIncline);
+  //  Serial.println(buf);
+
+  return trainerIncline;
+
 }
 
 void calculateTargetGrade(void) {
@@ -598,28 +513,34 @@ void gradeSimDisplay()
 
   // --   row 2 --
   //sprintf_P(buf, PSTR("%.2d%%"), trainerIncline); //  Display current trainerIncline centred and 2X-scale text
-  sprintf_P(buf, PSTR("%d%%"), trainerIncline); //  Display current trainerIncline centred and 2X-scale text
+  int adjIncline = trainerIncline - trainerInclineZeroOffset;
+  sprintf_P(buf, PSTR("%d%%"), adjIncline); //  Display current trainerIncline centred and 2X-scale text
   displayTextRight (1, 9, 6, 7, 2, buf);
 
   // --   row 3 --
   //sprintf_P(buf, PSTR("%d kg"), riderWeight); // Display weight bottom left
-  sprintf_P(buf, PSTR("%.2g%% pwm"), motorPWM); // Display motor PWM bottom left
+  sprintf_P(buf, PSTR("%g pwm"), motorPWM); // Display motor PWM bottom left
   //displayTextLeft( row,  rowPos,  startcol,  colwidth,  textsize, message )
   displayTextLeft (2, 24, 0, 9, 1, buf);
 
-  // Display manual or smart trainer incline bottom right
-  if (!trainerLeveled)
-  {
-    sprintf_P(buf, PSTR("Adjust %.2g%%"), targetGrade); // Display targetGrade bottom right
-  } else if (inManualMode) {
-    sprintf_P(buf, PSTR("Manual %.2g%%"), targetGrade); // Display targetGrade bottom right
-  } else {
-    sprintf_P(buf, PSTR("Trainer %.2g%%"), targetGrade); // Display targetGrade bottom right
+  // Display  smartTrainer target grade bottom right
+  double adjTargetIncline = targetGrade - trainerInclineZeroOffset;
+  switch (trainerMode) {
+    case 0: // trainerLevel Mode
+      sprintf_P(buf, PSTR("Level %.3g%%"), adjTargetIncline);
+      break;
+    case 1: // manual mode
+      sprintf_P(buf, PSTR("Manual %.3g%%"), adjTargetIncline);
+      break;
+    case 2:
+      sprintf_P(buf, PSTR("Trainer %.3g%%"), adjTargetIncline);
+      break;
   }
   //void displayTextRight( row, rowPos, startcol, colwidth, textsize,  message)
   displayTextRight(2, 24, 20, 13, 1, buf);
 
 }
+
 void getBLEServices() {
 
   displayLineLeft(1, 12, 0, F("Bluetooth scanning"));
@@ -653,7 +574,7 @@ void getBLEServices() {
         BLE.stopScan();
         Serial.println("got CABLE device. scan stopped");
 
-        // subscribe to BLE speed and power
+        // connect and subscribe to BLE speed and power
         getsubscribedtoSensor(cablePeripheral);
 
       }
