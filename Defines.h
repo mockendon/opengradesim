@@ -1,8 +1,5 @@
 /*
  * Defines.h
- *
- *  Created on: Oct 10, 2015
- *      Author: David
  */
 
 #ifndef DEFINES_H_

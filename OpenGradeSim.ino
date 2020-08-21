@@ -44,7 +44,7 @@
 #include <PID_v1.h>
 #include "Defines.h"
 #include "PushButton.h"
-#include "OLEDDisplay.h"'
+#include "OLEDDisplay.h"
 #include "MyMenu.h"
 
 Sabertooth ST(128); // The Sabertooth is on address 128.
@@ -122,15 +122,15 @@ int speedKMH;                     // Calculated speed in KM per Hr
 // Custom Char Bluetooth Logo
 
 byte customChar[] = {
-                      B00000,
-                      B00110,
-                      B00101,
-                      B10110,
-                      B01100,
-                      B10110,
-                      B00101,
-                      B00110
-                    };
+  B00000,
+  B00110,
+  B00101,
+  B10110,
+  B01100,
+  B10110,
+  B00101,
+  B00110
+};
 
 // Our BLE peripheral and characteristics
 
@@ -207,6 +207,7 @@ void loop() {
 
 
 int trainerMode = 0; // levelTrainer=0 Manual=1, SmartTrainer=2
+bool onTargetGrade = false;
 
 boolean gradeSim() {
   static bool firstTime = true;
@@ -249,7 +250,7 @@ boolean gradeSim() {
       setDouble(targetGrade, 1, 45, 1); // check for manual changes in grade
       break;
     case 2: // smartTrainer mode
-      if (upDownBtnPressed()) 
+      if (upDownBtnPressed())
       {
         trainerMode = 1; // switching to manual mode
         return false;
@@ -276,7 +277,10 @@ boolean gradeSim() {
       break;
   }
 
-  moveActuator(); // Compute PWM and apply to motor
+  //if (!onTargetGrade)
+  {
+    moveActuator(); // Compute PWM and apply to motor
+  }
   gradeSimDisplay(); // Display the current data
   return false;
 }
@@ -291,21 +295,23 @@ void lowerActuator(void) {
   ST.motor(1, -127);
 }
 
+
+
 void moveActuator(void)
 {
   trainerInclineErr = -abs(targetGrade - trainerIncline); // make err negative if it isnt already.
 
-  if (trainerInclineErr < -.5)
+  if (trainerInclineErr != 0)
   {
-    //Serial.println("far PID settings");
+    Serial.println("computing PWM");
     motorPID.SetTunings(2, 0, 0); // a ways to go. use agressive tunning
+    onTargetGrade = false;
+    motorPID.Compute(); // Use target angle, trainer angle, and PID parm values to calc the motor pwm value.
   } else {
-    //Serial.println("close PID settings");
-    motorPID.SetTunings(.5, 0, 0); // pretty close. easy does it.
+    Serial.println("target achieved. stopping.");
+    motorPWM = 0;
+    onTargetGrade = true;
   }
-
-  motorPID.Compute(); // Use target angle, trainer angle, and PID parm values to calc the motor pwm value.
-
   int SaberSpeed = motorPWM;
   //int pwm = constrain(motorPWM, 0, 255);
   //int SaberSpeed = map(pwm, 0, 255, 0, 127); // mapping default pid pwm speeds to SaberTooth SimpleSerial cmds (1 - 127)
@@ -324,19 +330,19 @@ void moveActuator(void)
     ST.motor(1, SaberSpeed);
     // Serial.println(SaberSpeed);
   }
-//  Serial.print("levelTrainer targetGrade (setpoint):");
-//  Serial.print(targetGrade);
-//  Serial.print(" inclineErr (input):");
-//  Serial.print(trainerInclineErr);
-//  Serial.print(" pwm (output):");
-//  Serial.print(motorPWM);
-//  Serial.print(" Kp_avg:");
-//  Serial.print(motorPID.GetKp());
-//  Serial.print(" Ki_avg:");
-//  Serial.print(motorPID.GetKi());
-//  Serial.print(" Kd_avg:");
-//  Serial.print(motorPID.GetKd());
-//  Serial.println();
+  //  Serial.print("levelTrainer targetGrade (setpoint):");
+  //  Serial.print(targetGrade);
+  //  Serial.print(" inclineErr (input):");
+  //  Serial.print(trainerInclineErr);
+  //  Serial.print(" pwm (output):");
+  //  Serial.print(motorPWM);
+  //  Serial.print(" Kp_avg:");
+  //  Serial.print(motorPID.GetKp());
+  //  Serial.print(" Ki_avg:");
+  //  Serial.print(motorPID.GetKi());
+  //  Serial.print(" Kd_avg:");
+  //  Serial.print(motorPID.GetKd());
+  //  Serial.println();
 }
 
 bool lowerTrainer()
@@ -383,7 +389,7 @@ bool lowerTrainer()
 
 bool autoLevelTrainerIncline() {
   /* Samples the controler head grade n times and saves it as a correction offset to be applied when calculating bike grade.
-  Press any key to exit without updating. Could be modified to give up and accept current offset. */
+    Press any key to exit without updating. Could be modified to give up and accept current offset. */
 
   //Serial.print("auto leveling trainer.");
   static int sampleTimes = 0;
