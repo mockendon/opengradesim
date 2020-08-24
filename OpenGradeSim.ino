@@ -60,14 +60,14 @@ MovingAverageFilter movingAverageFilter_speed(2);    // 0.5 second speed average
 
 long previousMillis = 0;          // last time in ms
 float smoothRadPitch = 0;         // variable for the pitch
-int trainerIncline = 0;           // variable for the % trainerIncline (actual per accelerometers)
+double trainerIncline = 0;           // variable for the % trainerIncline (actual per accelerometers)
 double trainerInclineZeroOffset = 0; // inline adjustment from auto zero trainer incline
 double targetGrade = 0;           // variable for the calculated grade (aim)
 double manualTargetGrade = 0;
 bool trainerLeveled = false;
 
 // motor pid params
-double Kp_avg = 2, Ki_avg = 0, Kd_avg = 0;
+double Kp_avg = 1, Ki_avg = 0, Kd_avg = 0;
 double Kp_close = .7, Ki_close = 0, Kd_close = 0;
 double Kp_avg_adj = 0.0, Ki_avg_adj = 0.00, Kd_avg_adj = 0.0;
 
@@ -102,7 +102,7 @@ UserSettings userSettings;
 // call it "userSettings_FlashStore".
 FlashStorage(userSettings_FlashStore, UserSettings);
 
-int riderWeight = 113;            // default val combined rider and bike weight
+int riderWeight = 98; // trek 820 is 33.68 lbs; was 113;            // default val combined rider and bike weight
 int powerTrainer = 0;             // variable for the power (W) read from bluetooth
 int speedTrainer = 0;             // variable for the speed (kph) read from bluetooth
 float speedMpersec = 0;           // for calculation
@@ -111,7 +111,7 @@ float powerMinusResistance = 0;   // for calculation
 
 // For power and speed declare some variables and set some default values
 
-int wheelCircCM = 2070;           // Default val for wheel circumference in centimeters. 26×2.125 = 2017, (700c 32 road wheel) 2300
+int wheelCircCM = 2070;           // Default val for wheel circumference in centimeters. (26 × 2.125 = 2070, 700c 32 road wheel = 2300)
 long WheelRevs1;                  // For speed data set 1
 long Time_1;                      // For speed data set 1
 long WheelRevs2;                  // For speed data set 2
@@ -214,6 +214,7 @@ boolean gradeSim() {
   static bool trainerLeveled = false;
 
   static long previousSpeedandPowerMillis = 0; // the last time we queried the SmartTrainer for Speed and Power
+  static double prevTargetGrade = 0;
 
   trainerIncline = findTrainerIncline();
 
@@ -225,7 +226,7 @@ boolean gradeSim() {
         if (firstTime)
         {
           firstTime = false;
-          targetGrade = trainerInclineZeroOffset == 0 ? trainerIncline : trainerInclineZeroOffset; // set target incline as current location if offset has never been set, otherwise use the stored offset
+          prevTargetGrade = targetGrade = trainerInclineZeroOffset == 0 ? trainerIncline : trainerInclineZeroOffset; // set target incline as current location if offset has never been set, otherwise use the stored offset
           return false; // skipping first cycle to ignore the selectBtnPressed that got us here.
         }
         trainerInclineZeroOffset = trainerIncline;
@@ -257,8 +258,9 @@ boolean gradeSim() {
       }
       if (debugging)
       {
-        powerTrainer = movingAverageFilter_power.process(210);
-        speedTrainer = movingAverageFilter_speed.process(15);
+        //powerTrainer = movingAverageFilter_power.process(210);
+        //speedTrainer = movingAverageFilter_speed.process(15);
+        serialReceive();
       } else {
         if (!cablePeripheral.connected())
         {
@@ -271,16 +273,24 @@ boolean gradeSim() {
           previousSpeedandPowerMillis = currentMillis;
           refreshSpeedandPower(); // Get any updated data
         }
+
+        calculateTargetGrade(); // Use power and speed to calculate the targetGrade
+        targetGrade = trainerInclineZeroOffset + targetGrade;
       }
-      calculateTargetGrade(); // Use power and speed to calculate the targetGrade
-      targetGrade = trainerInclineZeroOffset + targetGrade;
       break;
+  } // end switch
+  
+  if (onTargetGrade && (abs(prevTargetGrade - targetGrade) > .5)) // only respond to targetgrade changes > .5
+  {
+    prevTargetGrade = targetGrade;
+    onTargetGrade = false;
   }
 
-  //if (!onTargetGrade)
+  if (!onTargetGrade) 
   {
     moveActuator(); // Compute PWM and apply to motor
   }
+  
   gradeSimDisplay(); // Display the current data
   return false;
 }
@@ -295,33 +305,34 @@ void lowerActuator(void) {
   ST.motor(1, -127);
 }
 
-
-
 void moveActuator(void)
 {
-  trainerInclineErr = -abs(targetGrade - trainerIncline); // make err negative if it isnt already.
-
-  if (trainerInclineErr != 0)
+  double err = targetGrade - trainerIncline;
+  trainerInclineErr = -abs(err); // make err negative if it isnt already.
+  int SaberSpeed = 0;
+  if (trainerInclineErr < -.20)
   {
-    Serial.println("computing PWM");
-    motorPID.SetTunings(2, 0, 0); // a ways to go. use agressive tunning
-    onTargetGrade = false;
-    motorPID.Compute(); // Use target angle, trainer angle, and PID parm values to calc the motor pwm value.
+    //Serial.println("computing PWM");
+    motorPID.SetTunings(2, 0, 0);
+    biColorLED(true, false); // red
+    motorPID.Compute(); // Use target angle, trainer angle to calc the motor pwm value.
+    SaberSpeed = motorPWM;
+    //int pwm = constrain(motorPWM, 0, 255);
+    //int SaberSpeed = map(pwm, 0, 255, 0, 127); // mapping default pid pwm speeds to SaberTooth SimpleSerial cmds (1 - 127)
+
   } else {
     Serial.println("target achieved. stopping.");
-    motorPWM = 0;
+    biColorLED(true, true); // green
+    SaberSpeed = 0;
     onTargetGrade = true;
   }
-  int SaberSpeed = motorPWM;
-  //int pwm = constrain(motorPWM, 0, 255);
-  //int SaberSpeed = map(pwm, 0, 255, 0, 127); // mapping default pid pwm speeds to SaberTooth SimpleSerial cmds (1 - 127)
 
-  if (SaberSpeed != prev_SaberSpeed) {
+  if (SaberSpeed != prev_SaberSpeed)
+  {
     prev_SaberSpeed = SaberSpeed;
-
-    if (abs(SaberSpeed) < 23) { // stop the motor if SaberSpeed is too small to move the actuator.
-      SaberSpeed = 0;
-    }
+    //    if (abs(SaberSpeed) < 23) { // stop the motor if SaberSpeed is too small to move the actuator.
+    //      SaberSpeed = 0;
+    //    }
 
     if (trainerIncline > targetGrade) {
       SaberSpeed = -abs(SaberSpeed); // flip direction if trainer is below target
@@ -330,19 +341,19 @@ void moveActuator(void)
     ST.motor(1, SaberSpeed);
     // Serial.println(SaberSpeed);
   }
-  //  Serial.print("levelTrainer targetGrade (setpoint):");
-  //  Serial.print(targetGrade);
-  //  Serial.print(" inclineErr (input):");
-  //  Serial.print(trainerInclineErr);
-  //  Serial.print(" pwm (output):");
-  //  Serial.print(motorPWM);
+
+  Serial.print("moveActuator targetGrade (setpoint):");  Serial.print(targetGrade);
+  Serial.print(" trainerIncline:");  Serial.print(trainerIncline);
+
+  Serial.print(" inclineErr (input):");  Serial.print(trainerInclineErr);
+  Serial.print(" SaberSpeed (output):");  Serial.print(SaberSpeed);
   //  Serial.print(" Kp_avg:");
   //  Serial.print(motorPID.GetKp());
   //  Serial.print(" Ki_avg:");
   //  Serial.print(motorPID.GetKi());
   //  Serial.print(" Kd_avg:");
   //  Serial.print(motorPID.GetKd());
-  //  Serial.println();
+  Serial.println();
 }
 
 bool lowerTrainer()
@@ -435,10 +446,10 @@ bool autoLevelTrainerIncline() {
 
 }
 
-int findTrainerIncline() {
+double findTrainerIncline() {
   float rawx, rawy, rawz;
   float x, y, z;
-  int trainerIncline = 0;
+  double trainerIncline = 0;
 
   if (IMU.accelerationAvailable()) {
     IMU.readAcceleration(rawx, rawy, rawz);
@@ -908,4 +919,30 @@ void biColorLED(bool on, bool color1) {
   } else {
     digitalWrite(redLedPin, HIGH);        //LED RED off
   }
+}
+void serialReceive()
+{
+  if (Serial.available())
+  {
+    char b = Serial.read();
+    Serial.flush();
+    ;
+    double modifier = 0.25;
+    switch (b)
+    {
+      case '+':
+
+        targetGrade = targetGrade + modifier;
+        break;
+      case '-':
+        targetGrade = targetGrade - modifier;
+        break;
+    }
+
+    //    Serial.print("serialReceive b:");
+    //    Serial.print(b);
+    Serial.print("; targetGrade:");
+    Serial.println(targetGrade);
+  }
+
 }
