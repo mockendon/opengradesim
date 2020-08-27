@@ -208,6 +208,7 @@ void loop() {
 
 int trainerMode = 0; // levelTrainer=0 Manual=1, SmartTrainer=2
 bool onTargetGrade = false;
+double inputGrade = 0;
 
 boolean gradeSim() {
   static bool firstTime = true;
@@ -226,7 +227,7 @@ boolean gradeSim() {
         if (firstTime)
         {
           firstTime = false;
-          prevTargetGrade = targetGrade = trainerInclineZeroOffset == 0 ? trainerIncline : trainerInclineZeroOffset; // set target incline as current location if offset has never been set, otherwise use the stored offset
+          prevTargetGrade = inputGrade = trainerInclineZeroOffset == 0 ? trainerIncline : trainerInclineZeroOffset; // set target incline as current location if offset has never been set, otherwise use the stored offset
           return false; // skipping first cycle to ignore the selectBtnPressed that got us here.
         }
         trainerInclineZeroOffset = trainerIncline;
@@ -235,10 +236,10 @@ boolean gradeSim() {
         trainerMode = 2; // switching to smartTrainer mode
         break;
       case 2: // smartTrainer mode
-        trainerMode = 0; // force reveleveling each time gradeSim is started.
+        trainerMode = 0; // force releveling each time gradeSim is started.
         firstTime = true;
-        lowerActuator();
-        delay(5000); // allow time for actuator to lower.
+        //lowerActuator();
+        //delay(5000); // allow time for actuator to lower.
         stopActuator(); // turn off motor
         return true; // exit gradeSim
     }
@@ -246,9 +247,9 @@ boolean gradeSim() {
 
   switch (trainerMode)
   {
-    case 0: // levelTrainer mode
+    case 0: // levelTrainer mode. intentional fallthrough.
     case 1: // manual mode
-      setDouble(targetGrade, 1, 45, 1); // check for manual changes in grade
+      setDouble(inputGrade, 1, 45, 1); // check for manual changes in grade
       break;
     case 2: // smartTrainer mode
       if (upDownBtnPressed())
@@ -275,22 +276,29 @@ boolean gradeSim() {
         }
 
         calculateTargetGrade(); // Use power and speed to calculate the targetGrade
-        targetGrade = trainerInclineZeroOffset + targetGrade;
+        inputGrade = trainerInclineZeroOffset + inputGrade;
       }
       break;
   } // end switch
-  
-  if (onTargetGrade && (abs(prevTargetGrade - targetGrade) > .5)) // only respond to targetgrade changes > .5
+
+  targetGrade = round(inputGrade); // round to nearest whole number
+
+  // Serial.print("inputGrade:"); Serial.print(inputGrade);
+  // Serial.print("; rounded targetGrade:"); Serial.println(targetGrade);
+
+  // Only respond to targetgrade changes if we are already locked on the previous position
+  // and there has been a change of 1 degree or more.
+  if (onTargetGrade && (prevTargetGrade != targetGrade))
   {
     prevTargetGrade = targetGrade;
     onTargetGrade = false;
   }
 
-  if (!onTargetGrade) 
+  if (!onTargetGrade)
   {
     moveActuator(); // Compute PWM and apply to motor
   }
-  
+
   gradeSimDisplay(); // Display the current data
   return false;
 }
@@ -309,13 +317,15 @@ void moveActuator(void)
 {
   double err = targetGrade - trainerIncline;
   trainerInclineErr = -abs(err); // make err negative if it isnt already.
+
   int SaberSpeed = 0;
-  if (trainerInclineErr < -.20)
+  //if (trainerInclineErr < -.20)
+  if (trainerInclineErr < -.10)
   {
     //Serial.println("computing PWM");
     motorPID.SetTunings(2, 0, 0);
     biColorLED(true, false); // red
-    motorPID.Compute(); // Use target angle, trainer angle to calc the motor pwm value.
+    motorPID.Compute(); // Use targetGrade and current trainer angle to calc the motor pwm value.
     SaberSpeed = motorPWM;
     //int pwm = constrain(motorPWM, 0, 255);
     //int SaberSpeed = map(pwm, 0, 255, 0, 127); // mapping default pid pwm speeds to SaberTooth SimpleSerial cmds (1 - 127)
@@ -339,7 +349,6 @@ void moveActuator(void)
     }
 
     ST.motor(1, SaberSpeed);
-    // Serial.println(SaberSpeed);
   }
 
   Serial.print("moveActuator targetGrade (setpoint):");  Serial.print(targetGrade);
@@ -490,19 +499,19 @@ void calculateTargetGrade(void) {
   speedMpersec = speedTrainer / 3.6;                                                  // find speed in SI units. 1 meter / second (m/s) is equal 3.6 kilometers / hour (km/h)
   if (speedMpersec == 0)
   {
-    targetGrade = 0;
+    inputGrade = 0;
   }
   else
   {
-    targetGrade = ((powerMinusResistance / (riderWeight * 9.8)) / speedMpersec) * 100; // calculate grade of climb in %
+    inputGrade = ((powerMinusResistance / (riderWeight * 9.8)) / speedMpersec) * 100; // calculate grade of climb in %
   }
 
   // Limit upper and lower grades
-  if (targetGrade < -10) {
-    targetGrade = -10;
+  if (inputGrade < -10) {
+    inputGrade = -10;
   }
-  if (targetGrade > 20) {
-    targetGrade = 20;
+  if (inputGrade > 20) {
+    inputGrade = 20;
   }
 }
 
@@ -530,8 +539,10 @@ void gradeSimDisplay()
 
   // --   row 2 --
   //sprintf_P(buf, PSTR("%.2d%%"), trainerIncline); //  Display current trainerIncline centred and 2X-scale text
-  int adjIncline = trainerIncline - trainerInclineZeroOffset;
-  sprintf_P(buf, PSTR("%d%%"), adjIncline); //  Display current trainerIncline centred and 2X-scale text
+  //int adjIncline = trainerIncline - trainerInclineZeroOffset;
+  //sprintf_P(buf, PSTR("%d%%"), adjIncline); //  Display current trainerIncline centered and 2X-scale text
+  int tGrade = (int) targetGrade - trainerInclineZeroOffset;
+  sprintf_P(buf, PSTR("%d%%"), tGrade); // Display target grade centered and 2X-scale text
   displayTextRight (1, 9, 6, 7, 2, buf);
 
   // --   row 3 --
@@ -541,7 +552,7 @@ void gradeSimDisplay()
   displayTextLeft (2, 24, 0, 9, 1, buf);
 
   // Display  smartTrainer target grade bottom right
-  double adjTargetIncline = targetGrade - trainerInclineZeroOffset;
+  double adjTargetIncline = inputGrade - trainerInclineZeroOffset;
   switch (trainerMode) {
     case 0: // trainerLevel Mode
       sprintf_P(buf, PSTR("Level %.3g%%"), adjTargetIncline);
@@ -932,17 +943,17 @@ void serialReceive()
     {
       case '+':
 
-        targetGrade = targetGrade + modifier;
+        inputGrade = inputGrade + modifier;
         break;
       case '-':
-        targetGrade = targetGrade - modifier;
+        inputGrade = inputGrade - modifier;
         break;
     }
 
     //    Serial.print("serialReceive b:");
     //    Serial.print(b);
-    Serial.print("; targetGrade:");
-    Serial.println(targetGrade);
+    Serial.print("; inputGrade:");
+    Serial.println(inputGrade);
   }
 
 }
