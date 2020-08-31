@@ -59,37 +59,7 @@ int SimpleSerialMenu::updateSelection() {
 boolean SimpleSerialMenu::selectionMade() {
   return getbtnPressed() == SELECT_BTN ? true : false;
 }
-//
-//void SimpleSerialMenu::displayMenu() {
-//
-//  //  Blink Without Delay to keep prints from blasting out too fast.
-//  static unsigned long preMil = millis();
-//  unsigned long curMil = millis();
-//  if(curMil - preMil >= 500) {  // print every half second
-//    //Serial.print("btnPressed: "); Serial.println(btnPressed);
-//    preMil = curMil;
-//
-//    char outBuf[17];
-//
-//    for (int i = 0; i < currentMenu->getSize(); i++) {
-//
-//      if (i == currentItemIndex) {
-//        Serial.print(F("---> "));
-//      }
-//      else {
-//        Serial.print(F("     "));
-//      }
-//      // use getText method to pull text out into a buffer you can print
-//      getText(outBuf, i);
-//      Serial.println(outBuf);
-//    }
-//    Serial.print(F("currentItemIndex =  "));
-//    Serial.println(currentItemIndex);
-//    for (int i = 0; i < 3; i++) {  // put some spaces before next print
-//      Serial.println();
-//    }
-//  }
-//}
+
 void SimpleSerialMenu::displayMenu() {
 
   char outBuf[NUM_LCD_COLS + 1];
@@ -152,8 +122,8 @@ MenuItem PROGMEM pidParmsMenu[4] = {
 
 MenuItem PROGMEM debugMenu[3] = {
 
-  { "sim 15kpm,210W", startPhoneySpeedPower }
-  , { "End sim", stopPhoneySpeedPower }
+  { "Start Debug", startPhoneySpeedPower }
+  , { "End Debug", stopPhoneySpeedPower }
   , { "<Back>", gotoSettingsMenu }
 };
 
