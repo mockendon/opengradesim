@@ -24,10 +24,11 @@
   So you can now shift your weight, peddle, bang on your bike, etc. and the climber wont move unless the requested grade changes.
   - A bicolor LED was added. It turns red when the the actuator is moving and green when its locked on a target grade.
   - Now allows for negative grades.
-  - Added a climber leveling mode. This mode serves two functions.  It is used to physically level the trainer to 0% incline, and zeros the 
-  control unit at the same time. In this mode the up and down buttons are used to level the trainer to 0% incline. Pressing the the stop button stores the
-  sensor incline as an offset in flash memory. This offset is used to automatically re-level the climber and zero the control unit next time gradesim 
-  is started. So now you dont have to physically move the control head to level the climber and the control head can be mounted at an angle.
+  - Added a climber leveling mode. This mode both physically levels the bike to 0% incline and sets the controller grade 
+  display to 0%. While in this mode, the up and down buttons are used adjust the bikes incline to level (as if the front tire is on). 
+  Once you have leveled the trainer, pressing the stop button stores the current incline to flash memory. This value is used to automatically re-level
+  the bike the next time gradeSim is started. So now you dont have to physically move the control head to level the climber and the control 
+  head can be mounted at an angle.
   
   - Added UI setting menu that allows setting Rider/Bike Weight, Wheel Size, PID parameters, Debug Mode
   - Finished Matt's work on storage of user settings. (Rider/Bike Weight, Wheel Size, Trainer Zero offset, PID parameters). This could easily be
@@ -94,8 +95,8 @@ double trainerInclineErr = 0;
 
 double motorPWM = 0;
 double prev_SaberSpeed = 0;
-//PID       (&Input,             &Output,   &Setpoint,    Kp, Ki, Ki,     Kd, P_ON_M    Direction, Mode)
-PID motorPID(&trainerInclineErr, &motorPWM, &targetGrade, Kp_avg, Ki_avg, Kd_avg, DIRECT); //P_ON_M P_ON_E
+//PID       (&Input,             &Output,   &Setpoint,    Kp, Ki, Ki,     Kd,  Mode)
+PID motorPID(&trainerInclineErr, &motorPWM, &targetGrade, Kp_avg, Ki_avg, Kd_avg, DIRECT); 
 
 // user settings
 // TODO: convert to array of user profiles. Add bikeID and Desc to allow multiple user/bike profiles.
@@ -116,7 +117,7 @@ UserSettings userSettings;
 // call it "userSettings_FlashStore".
 FlashStorage(userSettings_FlashStore, UserSettings);
 
-int riderWeight = 99; // trek 820 15.28 kg (33.68 lbs) + me 83.91 kg (185 lbs); was 113;            // default val combined rider and bike weight
+int riderWeight = 99; // trek 820 15.28 kg (33.68 lbs) + me 83.91 kg (185 lbs); was 113;default val combined rider and bike weight
 int powerTrainer = 0;             // variable for the power (W) read from bluetooth
 int speedTrainer = 0;             // variable for the speed (kph) read from bluetooth
 float speedMpersec = 0;           // for calculation
@@ -166,18 +167,18 @@ void setup() {
   Serial.begin(9600);
   delay(2000);
   // Init LED
-  pinMode(redLedPin, OUTPUT);             // sets the digital pin as output
-  pinMode(commonHighLedPin, OUTPUT);      // sets the digital pin as output
-  pinMode(greenLedPin, OUTPUT);           // sets the digital pin as output
-  digitalWrite(commonHighLedPin, HIGH);   // LED common is high.
+  pinMode(RED_LED_PIN, OUTPUT);             // sets the digital pin as output
+  pinMode(COMMON_HIGH_LED_PIN, OUTPUT);     // sets the digital pin as output
+  pinMode(GREEN_LED_PIN, OUTPUT);           // sets the digital pin as output
+  digitalWrite(COMMON_HIGH_LED_PIN, HIGH);  // LED common is high.
   biColorLED(true, false);
 
   // init motor controller
   saberToothSetup();
 
   // setup a pin connected to RST (A5, pin 19) to pull reset low if reset is required
-  pinMode (resetPin, OUTPUT);
-  digitalWrite (resetPin, HIGH);
+  pinMode (RESET_PIN, OUTPUT);
+  digitalWrite (RESET_PIN, HIGH);
 
   // init OLED display
   initOLED();
@@ -780,7 +781,7 @@ void refreshSpeedandPower(void) {
 
 bool resetSystem(void) {
   Serial.println("Resetting System");
-  digitalWrite (19, LOW);
+  digitalWrite (RESET_PIN, LOW);
   return true;
 }
 
@@ -940,15 +941,15 @@ void biColorLED(bool on, bool color1) {
     if (color1)
     {
       // flip led to green
-      digitalWrite(greenLedPin, LOW);    //LED green ON
-      digitalWrite(redLedPin, HIGH);     //LED RED off
+      digitalWrite(GREEN_LED_PIN, LOW);    //LED green ON
+      digitalWrite(RED_LED_PIN, HIGH);     //LED RED off
     } else {
       // flip led to red
-      digitalWrite(greenLedPin, HIGH);   //LED green off
-      digitalWrite(redLedPin, LOW);      //LED RED on
+      digitalWrite(GREEN_LED_PIN, HIGH);   //LED green off
+      digitalWrite(RED_LED_PIN, LOW);      //LED RED on
     }
   } else {
-    digitalWrite(redLedPin, HIGH);        //LED RED off
+    digitalWrite(RED_LED_PIN, HIGH);        //LED RED off
   }
 }
 void serialReceive()

@@ -5,13 +5,16 @@
 #ifndef DEFINES_H_
 #define DEFINES_H_
 
-#define BUTTON_DEBOUNCE 60
-#define BUTTON_LONG_PRESS_TIME 2000
+/*  ARDUINO NANO 33 IOT Pin Usage */
+#define NO_BTN_PRESS          0
+#define DECLINE_BTN           1
+#define INCLINE_BTN           2
+#define SELECT_BTN            3
+#define RED_LED_PIN           8  // bi-color LED connected to digital pin
+#define COMMON_HIGH_LED_PIN   9  // bi-color LED connected to digital pin
+#define GREEN_LED_PIN        10  // bi-color LED connected to digital pin
+#define RESET_PIN            20 // (A6, pin 20) is used to pull the arduino reset pin low allowing software to do hard resets
 
-#define NO_BTN_PRESS 0
-#define DECLINE_BTN 1
-#define INCLINE_BTN 2
-#define SELECT_BTN 3
 
 // oled display has 64 rows x 128 cols
 #define NUM_LCD_ROWS 3
@@ -24,11 +27,9 @@
 
 #define WAIT_FOR_ACTUATOR_STOP_MIL 4000 //  seconds to wait for linear actuator to reach bottom
 
-#define VERSION_NUMBER 1.01
-#define redLedPin         8  // bi-color LED connected to digital pin
-#define commonHighLedPin  9  // bi-color LED connected to digital pin
-#define greenLedPin       10 // bi-color LED connected to digital pin
+#define BUTTON_DEBOUNCE 60
+#define BUTTON_LONG_PRESS_TIME 2000
 
-#define resetPin          19  // Pin linked to RST pin to allow software to do hard reset
+#define VERSION_NUMBER 1.01
 
 #endif /* DEFINES_H_ */
