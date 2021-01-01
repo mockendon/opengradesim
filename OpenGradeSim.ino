@@ -152,6 +152,8 @@ byte customChar[] = {
 BLEDevice cablePeripheral;
 BLECharacteristic speedCharacteristic;
 BLECharacteristic powerCharacteristic;
+BLECharacteristic batteryCharacteristic;
+uint8_t batteryLevel[1];
 
 enum TrainerMode {
   LevelTrainer,
@@ -292,6 +294,7 @@ boolean gradeSim() {
         {
           previousSpeedandPowerMillis = currentMillis;
           refreshSpeedandPower(); // Get any updated data
+          refreshBatteryLevel();
         }
 
         calculateTargetGrade(); // Use power and speed to calculate the grade
@@ -340,7 +343,7 @@ void moveActuator(void)
   if (trainerInclineErr < -.05)
   {
     if (trainerInclineErr < -2.00) {
-      motorPID.SetTunings(trainerInclineErr*-1, 0, 0); // The speed of correction is equal to the incline error.
+      motorPID.SetTunings(trainerInclineErr * -1, 0, 0); // The speed of correction is equal to the incline error.
       Serial.println(" using 3.0");
     } else {
       if (trainerInclineErr < -1.0) {
@@ -567,6 +570,10 @@ void gradeSimDisplay()
   //displayTextLeft( row,  rowPos,  startcol,  colwidth,  textsize, message )
   displayTextLeft (0, 0, 0, 5, 1, buf);
 
+  //battery level middle
+  sprintf_P(buf, PSTR("%d%% B"), batteryLevel[0]);
+  displayTextRight(0, 0, 12, 7, 1, buf);
+    
   // Display speed top right if more than 4kph
   if (speedTrainer > 4)
   {
@@ -615,9 +622,13 @@ void getBLEServices() {
   //displayLineLeft(2, 24, 2, F(" ")); // erase the unused line
   doDisplay();
 
+  if (cablePeripheral.localName() == ">CABLE") {
+    // already know the addess. just connect and resubscribe.
+    getsubscribedtoSensor(cablePeripheral);
+  }
+
   // entering blocking code
   while (!cablePeripheral.connected()) {
-    Serial.println("BLE Central");
     Serial.println("Turn on trainer and CABLE module and check batteries");
 
     // Scan or rescan for BLE services
@@ -669,7 +680,7 @@ void getsubscribedtoSensor(BLEDevice cablePeripheral) {
     Serial.println("Cycle Speed and Cadence Attribute discovery failed.");
     cablePeripheral.disconnect();
 
-    resetSystem();
+    //resetSystem();
     return;
   }
 
@@ -681,14 +692,26 @@ void getsubscribedtoSensor(BLEDevice cablePeripheral) {
     Serial.println("Cycle Power Attribute discovery failed.");
     cablePeripheral.disconnect();
 
-    resetSystem();
+    //resetSystem();
     return;
   }
 
+  // discover Battery Level attributes
+  Serial.println("Discovering Battery Service service ...");
+  if (cablePeripheral.discoverService("180f")) {
+    Serial.println("Battery Service discovered");
+  } else {
+    Serial.println("Battery Service Attribute discovery failed.");
+    cablePeripheral.disconnect();
+
+    //resetSystem();
+    return;
+  }
   // retrieve the characteristics
 
   speedCharacteristic = cablePeripheral.characteristic("2a5B");
   powerCharacteristic = cablePeripheral.characteristic("2a63");
+  batteryCharacteristic = cablePeripheral.characteristic("2A19");
 
   // subscribe to the characteristics (note authentication not supported on ArduinoBLE library v1.1.2)
 
@@ -699,11 +722,22 @@ void getsubscribedtoSensor(BLEDevice cablePeripheral) {
   };
 
   if (!powerCharacteristic.subscribe()) {
-    Serial.println("can not subscribe to speed and power");
+    Serial.println("can not subscribe to power");
     delay(5000);
-    resetSystem();
+    //resetSystem();
   } else {
-    Serial.println("subscribed to speed and power");
+    Serial.println("subscribed to power");
+  };
+
+  ////// --- battery level ---
+
+  if (!batteryCharacteristic.subscribe()) {
+    Serial.println("can not subscribe to battery level");
+    delay(5000);
+    //resetSystem();
+  } else {
+    Serial.println("subscribed to battery level");
+    batteryCharacteristic.readValue(batteryLevel, 1); // Initialize battery level display value
   };
 
   //  The time consuming BLE setup is done.
@@ -793,6 +827,16 @@ void refreshSpeedandPower(void) {
       }
     }
 
+  }
+}
+
+void refreshBatteryLevel(void) {
+
+  // Get updated battery level value
+  if (batteryCharacteristic.valueUpdated()) {
+    batteryCharacteristic.readValue(batteryLevel, 1);
+    Serial.print("battery Level:");
+    Serial.println(batteryLevel[0]);
   }
 }
 
