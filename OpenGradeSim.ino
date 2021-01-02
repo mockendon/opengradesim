@@ -564,22 +564,23 @@ void gradeSimDisplay()
   displayLineLeft(2, 20, 1, " "); // erase line 2
 
   // --   row 1 --
-  char buf[7];
-  sprintf_P(buf, PSTR("%d W"), powerTrainer); // Display power in watts top left
-
   //displayTextLeft( row,  rowPos,  startcol,  colwidth,  textsize, message )
-  displayTextLeft (0, 0, 0, 5, 1, buf);
+  char buf[7];
 
-  //battery level middle
-  sprintf_P(buf, PSTR("%d%% B"), batteryLevel[0]);
-  displayTextRight(0, 0, 12, 7, 1, buf);
+  // watts, battery level, kpm
+  if (cablePeripheral.connected()) {
+    sprintf_P(buf, PSTR("%d W"), powerTrainer);
+    displayTextLeft (0, 0, 0, 5, 1, buf);
+
+    sprintf_P(buf, PSTR("%d%% b"), batteryLevel[0]);
+    displayTextRight(0, 0, 12, 7, 1, buf);
     
-  // Display speed top right if more than 4kph
-  if (speedTrainer > 4)
-  {
     sprintf_P(buf, PSTR("%d kph"), speedTrainer);
     displayTextRight(0, 0, 20, 7, 1, buf);
+
   } else {
+    displayTextLeft (0, 0, 0, 5, 1, "-- W");
+    displayTextRight(0, 0, 12, 7, 1, "-- b");
     displayTextRight(0, 0, 20, 7, 1, "-- kpm");
   }
 
@@ -622,8 +623,8 @@ void getBLEServices() {
   //displayLineLeft(2, 24, 2, F(" ")); // erase the unused line
   doDisplay();
 
-  if (cablePeripheral.localName() == ">CABLE") {
-    // already know the addess. just connect and resubscribe.
+  if (cablePeripheral) {
+    Serial.println("reconnecting....."); // just connect and resubscribe.
     getsubscribedtoSensor(cablePeripheral);
   }
 
