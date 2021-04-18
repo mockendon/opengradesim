@@ -162,18 +162,18 @@
 <board>
 <fusionsync huburn="a.cGVyc29uYWw6dWUyYTQ0ZDUz" projecturn="a.cGVyc29uYWw6dWUyYTQ0ZDUzIzIwMTgwMzI5MTI1MDkxMDUx" f3durn="urn:adsk.wipprod:dm.lineage:ysT8Hyx8RWGckildv0kcSw" pcbguid="" lastpulledtime="" lastsyncedchangeguid="" latestrevisionid="a746b683-378a-4740-9185-f189dd29d611" lastsyncedrevisionid="a746b683-378a-4740-9185-f189dd29d611" lastboardhashguid="f335622d-2797-1003-01fd-1ef8d2da1293" lastpushedtime="2020-07-01T00:54:32Z" linktopcb3d="true"/>
 <plain>
-<wire x1="5.06" y1="11.31" x2="55" y2="11.25" width="0" layer="20"/>
+<wire x1="3.81" y1="11.31" x2="55" y2="11.25" width="0" layer="20"/>
 <wire x1="55" y1="11.25" x2="55" y2="28.75" width="0" layer="20"/>
-<wire x1="55" y1="28.75" x2="5" y2="28.75" width="0" layer="20"/>
-<wire x1="5" y1="28.75" x2="5.06" y2="11.31" width="0" layer="20"/>
-<hole x="8.75" y="25" drill="0.35"/>
-<hole x="8.75" y="15" drill="0.35"/>
+<wire x1="55" y1="28.75" x2="3.75" y2="28.75" width="0" layer="20"/>
+<wire x1="3.75" y1="28.75" x2="3.81" y2="11.31" width="0" layer="20"/>
+<hole x="7.5" y="25" drill="0.35"/>
+<hole x="7.5" y="15" drill="0.35"/>
 <hole x="51.25" y="15" drill="0.35"/>
 <hole x="51.25" y="25" drill="0.35"/>
-<wire x1="5" y1="28.75" x2="55" y2="28.75" width="0.1778" layer="46"/>
+<wire x1="3.75" y1="28.75" x2="55" y2="28.75" width="0.1778" layer="46"/>
 <wire x1="55" y1="28.75" x2="55" y2="11.25" width="0.1778" layer="46"/>
-<wire x1="55" y1="11.25" x2="5.06" y2="11.31" width="0.1778" layer="46"/>
-<wire x1="5.06" y1="11.31" x2="5" y2="28.75" width="0.1778" layer="46"/>
+<wire x1="55" y1="11.25" x2="3.81" y2="11.31" width="0.1778" layer="46"/>
+<wire x1="3.81" y1="11.31" x2="3.75" y2="28.75" width="0.1778" layer="46"/>
 </plain>
 <libraries>
 <library name="SparkFun-Connectors" urn="urn:adsk.eagle:library:513">
