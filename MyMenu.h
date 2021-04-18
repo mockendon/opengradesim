@@ -5,9 +5,6 @@
 
 boolean setWeight();
 boolean setWheelSize();
-boolean settrainerErrSensitivity();
-boolean setManualAdjPcnt();
-boolean lowerTrainer();
 boolean gradeSim();
 //void levelTrainer();
 boolean autoLevelTrainerIncline();
@@ -16,30 +13,18 @@ boolean setP();
 boolean setI();
 boolean setD();
 boolean resetSystem();
-
-boolean setOLEDDimOn();
-boolean setOLEDDimOff();
-boolean getOLEDDimMode();
-
-boolean startDebuggingMode();
-boolean stopDebuggingMode();
-boolean getDebuggingMode();
-
-boolean setUnitsImperial();
-boolean setUnitsMetric();
-int getDisplayUnits();
-
-boolean getLevelingMode();
-boolean setLevelingOff();
-boolean setLevelingOn();
+boolean dimDisplay(); // brightness controll
+boolean toggleOLEDDimOn();
+boolean toggleOLEDDimOff();
+boolean startPhoneySpeedPower();
+boolean stopPhoneySpeedPower();
 
 boolean gotoMainMenu();
 boolean gotoSettingsMenu();
-boolean gotoDisplayMenu();
+boolean gotoOnOffMenu();
 boolean gotoPIDMenu();
 boolean gotoDebugMenu();
-boolean gotoUnitsMenu();
-boolean gotoLevelingMenu();
+
 int getbtnPressed();
 
 /*****************************
@@ -68,11 +53,10 @@ int SimpleSerialMenu::updateSelection() {
   if (getbtnPressed() == DECLINE_BTN) {
     return -1;
   }
-  return 0; // select btn
+  return 0;
 }
 
 boolean SimpleSerialMenu::selectionMade() {
-  Serial.print("currentItemIndex:"); Serial.println(currentItemIndex);
   return getbtnPressed() == SELECT_BTN ? true : false;
 }
 
@@ -112,32 +96,21 @@ MenuItem PROGMEM mainMenu[2] = {
   , { "Settings", gotoSettingsMenu }
 };
 
-MenuItem PROGMEM settingsMenu[12] = {
-   // "....:....:...."  14 char max
-  { "Units", gotoUnitsMenu }                        // 0
-  , { "Bike+Rider wt", setWeight }                  // 1
-  , { "Wheel Size", setWheelSize }                  // 2
-  //, { "Auto-level", autoLevelTrainerIncline }
-  , { "Motor PID", gotoPIDMenu }                    // 3
-  , { "Manual Step %", setManualAdjPcnt }           // 4
-  , { "Grade Accuracy", settrainerErrSensitivity }  // 5
-  , { "Lower Trainer", lowerTrainer }               // 6
-  , { "Leveling", gotoLevelingMenu }                // 7
-  , { "Display", gotoDisplayMenu }                  // 8
-  , { "Reset", resetSystem }                        // 9
-  , { "Debug Mode", gotoDebugMenu }                 // 10
-  , { "<Back>", gotoMainMenu }                      // 11
-};
-int menuDisplayOption=8;
-
-MenuItem PROGMEM displayMenu[2] = {
-  { "Dimmer", setOLEDDimOn }
-  , { "Brighter", setOLEDDimOff }
+MenuItem PROGMEM settingsMenu[8] = {
+  { "Set Weight", setWeight }
+  , { "Set Wheel Size", setWheelSize }
+  , { "Auto-level", autoLevelTrainerIncline }
+  , { "Motor PID", gotoPIDMenu }
+  , { "Display", gotoOnOffMenu }
+  , { "Reset", resetSystem }
+  , { "Debug Mode", gotoDebugMenu }
+  , { "<Back>", gotoMainMenu }
 };
 
-MenuItem PROGMEM levelingMenu[2] = {
-  { "Startup only", setLevelingOff }
-  , { "Each time", setLevelingOn }
+MenuItem PROGMEM onOffMenu[3] = {
+  { "Dimmer", toggleOLEDDimOn }
+  , { "Brighter", toggleOLEDDimOff }
+  , { "<Back>", gotoSettingsMenu }
 };
 
 MenuItem PROGMEM pidParmsMenu[4] = {
@@ -147,23 +120,18 @@ MenuItem PROGMEM pidParmsMenu[4] = {
   , { "<Back>", gotoSettingsMenu }
 };
 
-MenuItem PROGMEM debugMenu[2] = {
-  { "Start Debug", startDebuggingMode }
-  , { "End Debug", stopDebuggingMode }
-};
+MenuItem PROGMEM debugMenu[3] = {
 
-MenuItem PROGMEM unitsMenu[2] = { // display formatting
-  { "Imperial", setUnitsImperial } // displayOption=0
-  , { "Metric", setUnitsMetric } // displayOption=1
+  { "Start Debug", startPhoneySpeedPower }
+  , { "End Debug", stopPhoneySpeedPower }
+  , { "<Back>", gotoSettingsMenu }
 };
 
 MenuList mainMenuList(mainMenu, 2);
-MenuList settingsMenuList(settingsMenu, 12);
-MenuList displayMenuList(displayMenu, 2);
+MenuList settingsMenuList(settingsMenu, 8);
+MenuList onOffMenuList(onOffMenu, 3);
 MenuList pidParmsMenuList(pidParmsMenu, 4);
-MenuList debugMenuList(debugMenu, 2);
-MenuList unitsMenuList(unitsMenu, 2);
-MenuList levelingMenuList(levelingMenu, 2);
+MenuList debugMenuList(debugMenu, 3);
 
 SimpleSerialMenu myMenu;
 
@@ -186,31 +154,15 @@ boolean gotoSettingsMenu() {
   return true;
 }
 
-boolean gotoDisplayMenu() {
-  myMenu.setCurrentMenu(&displayMenuList);
-  myMenu.currentItemIndex = getOLEDDimMode()?0:1; // 0 = dimmer off, 1 = dimmer on
+boolean gotoOnOffMenu() {
+  myMenu.setCurrentMenu(&onOffMenuList);
   return true;
 }
-
 boolean gotoPIDMenu() {
     myMenu.setCurrentMenu(&pidParmsMenuList);
   return true;
 }
-
 boolean gotoDebugMenu() {
   myMenu.setCurrentMenu(&debugMenuList);
-  myMenu.currentItemIndex = !getDebuggingMode()?0:1; // start option = 0, end option = 1
-  return true;
-}
-
-boolean gotoUnitsMenu() {
-  myMenu.setCurrentMenu(&unitsMenuList);
-  myMenu.currentItemIndex = getDisplayUnits();
-  return true;
-}
-
-boolean gotoLevelingMenu() {
-  myMenu.setCurrentMenu(&levelingMenuList);
-  myMenu.currentItemIndex = !getLevelingMode()?0:1;
   return true;
 }

@@ -31,6 +31,7 @@ Menu::Menu(MenuList* aList) {
   currentItemIndex = 0;
   cancelFlag = false;
   runningFunction = false;
+
 }
 
 boolean Menu::runFunction() {

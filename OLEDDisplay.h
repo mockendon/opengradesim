@@ -30,7 +30,6 @@ bool setNumber(int& val, int valMin, int valMax, int increment);
 void displayNumber(int val, const __FlashStringHelper* txt);
 bool setDouble(double& val, double valMin, double valMax, double increment);
 void displayDouble(double val, const __FlashStringHelper* txt);
-bool setOLEDDimmer (bool dimVal);
 void checkButtons();
 bool pressAnyButtonToExit();
 bool upDownBtnPressed();
