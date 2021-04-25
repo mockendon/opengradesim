@@ -32,6 +32,19 @@ PushButton btn2 = { 5, 2 };
 PushButton btn3 = { 6, 3 };
 int btnPressed = 0;
 
+// Custom Char Bluetooth Logo
+
+byte customChar[] = {
+  B00000,
+  B00110,
+  B00101,
+  B10110,
+  B01100,
+  B10110,
+  B00101,
+  B00110
+};
+
 //display.setTextColor(BLACK, WHITE); // 'inverted' text
 //Characters are rendered in the ratio of 7:10. Meaning, passing font size 1 will render the text at 7×10 pixels per character, passing 2 will render the text at 14×20 pixels per character and so on.
 void initOLED()
@@ -43,8 +56,7 @@ void initOLED()
   OLED = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
   if (!OLED->begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
-    Serial.println(F("SSD1306 allocation failed"));
-    //resetSystem();
+    //resetSys(F("SSD1306 allocation failed"));
   }
 
   // Show initial display buffer contents on the screen --
@@ -123,13 +135,8 @@ void doDisplay() {
   //  }
 }
 
-bool toggleOLEDDimOn () {
-  OLED->dim(true);
-  return true;
-}
-
-bool toggleOLEDDimOff () {
-  OLED->dim(false);
+bool setOLEDDimmer (bool dimVal) {
+  OLED->dim(dimVal);
   return true;
 }
 
@@ -371,7 +378,7 @@ void displayDouble(double val, const __FlashStringHelper* txt)
   displayLineLeft(2, 24, 1, " "); // erase the unused lines
 }
 
-int adjustNumber(int val, int origVal, int valMin, int maxvalMax, int increment)
+int adjustNumber(int val, int origVal, int valMin, int valMax, int increment)
 {
   //todo: limit to min and max
   switch (btnPressed) {
@@ -391,6 +398,10 @@ int adjustNumber(int val, int origVal, int valMin, int maxvalMax, int increment)
     default:
       break;
   }
+  if (val < valMin)
+      val = valMin;
+  if (val > valMax)
+      val = valMax;
   return val;
 }
 
@@ -425,7 +436,7 @@ bool setNumber(int& val, int valMin, int valMax, int increment)
   return firstTime;
 }
 
-double adjustDouble(double val, double origVal, double valMin, double maxvalMax, double increment)
+double adjustDouble(double val, double origVal, double valMin, double valMax, double increment)
 {
 
   switch (btnPressed) {
@@ -445,6 +456,10 @@ double adjustDouble(double val, double origVal, double valMin, double maxvalMax,
     default:
       break;
   }
+  if (val < valMin)
+      val = valMin;
+  if (val > valMax)
+      val = valMax;
   return val;
 }
 
