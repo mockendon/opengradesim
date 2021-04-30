@@ -124,7 +124,7 @@ MenuItem PROGMEM settingsMenu[12] = {
   , { "Leveling", gotoLevelingMenu }                // 6
   , { "Display", gotoDisplayMenu }                  // 7
   , { "Debugging", gotoDebugMenu }                  // 8
-  , { "Reboot", resetSystem }                       // 9
+  , { "Reset", resetSystem }                        // 9
   , { "Lower Trainer", lowerTrainer }               // 10
   , { "<Back>", gotoMainMenu }                      // 11
 };

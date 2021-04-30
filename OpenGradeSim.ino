@@ -25,23 +25,31 @@
   - A bicolor LED was added. It turns red when the the actuator is moving and green when its locked on a target grade.
   - Now allows for negative grades.
   - Added a climber leveling mode. This mode both physically levels the bike to 0% incline and sets the controller grade
-  display to 0%. While in this mode, the up and down buttons are used adjust the bikes incline to level. Once you have leveled the trainer, pressing 
+  display to 0%. While in this mode, the up and down buttons are used adjust the bikes incline to level. Once you have leveled the trainer, pressing
   the stop button stores the current incline to flash memory. This value is used to automatically re-level
   the bike the next time gradeSim is started. So now you dont have to physically move the control head to level the climber and the control
   head can be mounted at an angle.
 
-  - Added UI setting menu that allows setting Rider/Bike Weight, Wheel Size, PID parameters, Debug Mode
-  - Finished Matt's work on storage of user settings. (Rider/Bike Weight, Wheel Size, Trainer Zero offset, PID parameters). This could easily be
-  expanded store multiple rider/bike profiles.
+  - Added UI Setting menu that allows setting:
+      Units: (imperial/metric)
+      Rider/Bike Weight: combined bike/rider weight in kg or lbs
+      Wheel Size: defaults to 2070 mm
+      Manual Step %: Controls sensivity of manual incline/decline buttons.
+      Grade Accuracy: Controls precision of grade adjustments. 
+      Leveling Mode: Controls when the leveling mode is entered (each time GradeSim is started or first time only).
+      PID parameters: All setting of motor control loop parameters.
+      Debug Mode: When On, allows input through Serial console. 
+  
+  - Finished Matt's work on storage of user settings. This could easily be expanded store multiple rider/bike profiles.
   - Added a battery level display that displays the battery level of the <CABLE> device.
   - Added a IMU temperature sensing and display.  This was achieved by upgrading to the LSM6DS3 driver. See
   https://github.com/arduino-libraries/Arduino_LSM6DS3/issues/9. Uncomment the display lines to use.
-      
+
   The circuit: This is basically like Matt's circuit except -
   - I use a bigger actuator that requires a bigger motor driver. After experementing with a few different boards I ended up using a
   Sabertooth 3x32 that I had from a previous project. They are pricey, but worth it. It can be controlled with 3V signal eliminating the
   need for a logic level shifter, can be controlled with just two wires, and COMPLETELY ELIMINATED THE MOTOR WHINE AT ALL SPEEDS.
-  (Update - this was a bad idea. The sabertooth is really designed to be powered by a battery or a PSU. I couldnt get it to run for more than a 
+  (Update - this was a bad idea. The sabertooth is really designed to be powered by a battery or a PSU. I couldnt get it to run for more than a
   few minutes off a wall wart.)
   - Uses a 3 button pad instead of 2.
   - Added a bi-color LED to indicate state.
@@ -75,8 +83,8 @@ int accelMvgAvgLen = 11; // orig = 9
 MovingAverageFilter movingAverageFilter_x(accelMvgAvgLen); //
 MovingAverageFilter movingAverageFilter_y(accelMvgAvgLen); // Moving average filters for the accelerometers
 MovingAverageFilter movingAverageFilter_z(accelMvgAvgLen); //
-int powerMvgAvgLen = 6; // orig = 8; 
-// 8 = 2 second power average at 4 samples per sec 
+int powerMvgAvgLen = 6; // orig = 8;
+// 8 = 2 second power average at 4 samples per sec
 // 6 = 2 second power average at 3 samples per sec
 // 4 = 2 second power average at 2 samples per sec
 // 2 = 2 second power average at 1 samples per sec
@@ -107,14 +115,14 @@ TrainerMode trainerMode = LevelTrainer; // start in leveling mode.
 
 // user settings
 
-double riderWeight; 
-int wheelCircMM; 
-double trainerInclineZeroOffset; 
+double riderWeight;
+int wheelCircMM;
+double trainerInclineZeroOffset;
 double trainerErrSensitivity;
-double manAdjPcnt; 
-bool displayUnits; 
+double manAdjPcnt;
+bool displayUnits;
 bool dimmer;
-LevelingMode levelingMode; 
+LevelingMode levelingMode;
 
 // TODO: convert to array of user profiles. Add bikeID and Desc to allow multiple user/bike profiles.
 typedef struct {
@@ -145,12 +153,13 @@ float resistanceWatts = 0;        // for calculation
 float powerMinusResistance = 0;   // for calculation
 
 // For power and speed declare some variables and set some default values
-long WheelRevs1;                  // For speed data set 1
-long Time_1;                      // For speed data set 1
-long WheelRevs2;                  // For speed data set 2
-long Time_2;                      // For speed data set 2
-bool firstData = true;
+long PrevWheelRevs;                  // For speed data set 1
+long PrevWheelEvntTime;                      // For speed data set 1
+long currWheelRevs;                  // For speed data set 2
+long CurrWheelEvntTime;                      // For speed data set 2
+
 int speedKMH;                     // Calculated speed in KM per Hr
+int PrevSpeedKMH;
 
 // BLE peripheral and characteristics
 BLEDevice cablePeripheral;
@@ -198,6 +207,11 @@ void setup() {
     resetSys(F("BLE failed!"));
   }
 
+  // assign event handlers for connected, disconnected to peripheral
+  BLE.setEventHandler(BLEConnected, getSubscribedtoSensor);
+  BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
+
+
   biColorLED(true, true); // red to green to indicate init. is complete.
   myMenu.setCurrentMenu(&mainMenuList);
 }
@@ -237,7 +251,7 @@ boolean gradeSim() {
     Serial.println("select Btn Pressed");
     switch (trainerMode)
     {
-      case LevelTrainer: 
+      case LevelTrainer:
         if (firstTime)
         {
           Serial.println("FirstTime");
@@ -259,18 +273,18 @@ boolean gradeSim() {
       case Manual:
         trainerMode = SmartTrainer; // switching to smartTrainer mode
         break;
-      case SmartTrainer: 
-        if (levelingMode == FirstTime && firstTime) // ignore the first selectBtnPressed() if LevelingMode = FirstTime 
+      case SmartTrainer:
+        if (levelingMode == FirstTime && firstTime) // ignore the first selectBtnPressed() if LevelingMode = FirstTime
         {
-            firstTime = false;
-            return false;
-          }
+          firstTime = false;
+          return false;
+        }
 
         // select btn pressed while in smartTrainer mode. Set stage for reentry.
-        trainerMode = levelingMode == FirstTime? SmartTrainer:LevelTrainer; // optionally restart in leveling mode the next time gradesim is started.
+        trainerMode = levelingMode == FirstTime ? SmartTrainer : LevelTrainer; // optionally restart in leveling mode the next time gradesim is started.
         firstTime = true;
-        prev_SaberSpeed=0; // reset for next time
-        prevTargetGrade=0; // reset for next time 
+        prev_SaberSpeed = 0; // reset for next time
+        prevTargetGrade = 0; // reset for next time
         //lowerActuator();
         //delay(5000); // allow time for actuator to lower.
         stopActuator(); // turn off motor
@@ -287,15 +301,17 @@ boolean gradeSim() {
     if (currentMillis - previousSpeedandPowerMillis >= 200)
     {
       previousSpeedandPowerMillis = currentMillis;
-      refreshSpeedandPower(); // Get any updated data
-      refreshBatteryLevel();
+      //refreshPower();
+      //refreshSpeed();
+      //refreshSpeedandPower(); // Get any updated data
+      //refreshBatteryLevel();
     }
   }
-        
- // get input
+
+  // get input
   switch (trainerMode)
   {
-    case LevelTrainer: 
+    case LevelTrainer:
       setDouble(inputGrade, 1, 90, .25); // check for manual changes in grade
       break;
     case Manual:
@@ -314,8 +330,8 @@ boolean gradeSim() {
         serialReceive();
       } else {
 
-          calculateTargetGrade(); // Use power and speed to calculate the grade
-          inputGrade = trainerInclineZeroOffset + inputGrade;
+        calculateTargetGrade(); // Use power and speed to calculate the grade
+        inputGrade = trainerInclineZeroOffset + inputGrade;
       }
       break;
   } // end switch
@@ -335,7 +351,7 @@ boolean gradeSim() {
   {
     moveActuator(); // Compute PWM and apply to motor
   }
-  
+
   //refreshTemp();
   gradeSimDisplay(); // Display the current data
   return false;
@@ -400,18 +416,18 @@ void moveActuator(void)
   }
 
 
-//  Serial.print("moveActuator targetGrade (setpoint):");  Serial.print(targetGrade);
-//  Serial.print(" trainerIncline:");  Serial.print(trainerIncline);
-//
-//  Serial.print(" inclineErr (input):");  Serial.print(trainerInclineErr);
-//  Serial.print(" SaberSpeed (output):");  Serial.print(SaberSpeed);
-//  //  Serial.print(" motor_kp:");
-//  //  Serial.print(motorPID.GetKp());
-//  //  Serial.print(" motor_ki:");
-//  //  Serial.print(motorPID.GetKi());
-//  //  Serial.print(" motor_kd:");
-//  //  Serial.print(motorPID.GetKd());
-//  Serial.println();
+  //  Serial.print("moveActuator targetGrade (setpoint):");  Serial.print(targetGrade);
+  //  Serial.print(" trainerIncline:");  Serial.print(trainerIncline);
+  //
+  //  Serial.print(" inclineErr (input):");  Serial.print(trainerInclineErr);
+  //  Serial.print(" SaberSpeed (output):");  Serial.print(SaberSpeed);
+  //  //  Serial.print(" motor_kp:");
+  //  //  Serial.print(motorPID.GetKp());
+  //  //  Serial.print(" motor_ki:");
+  //  //  Serial.print(motorPID.GetKi());
+  //  //  Serial.print(" motor_kd:");
+  //  //  Serial.print(motorPID.GetKd());
+  //  Serial.println();
 
 }
 
@@ -530,18 +546,18 @@ void gradeSimDisplay()
   //displayTextLeft( row,  rowPos,  startcol,  colwidth,  textsize, message )
   char buf[7];
 
-  // watts, kph/mph 
+  // watts, kph/mph
   if (cablePeripheral.connected()) {
     sprintf_P(buf, PSTR("%d Watts"), powerTrainer);
     displayTextLeft (0, 0, 0, 8, 1, buf);
 
-  //  sprintf_P(buf, PSTR("%d%% b"), batteryLevel[0]);
-  //  displayTextRight(0, 0, 12, 7, 1, buf);
+    //  sprintf_P(buf, PSTR("%d%% b"), batteryLevel[0]);
+    //  displayTextRight(0, 0, 12, 7, 1, buf);
 
-    if (displayUnits==0)
+    if (displayUnits == 0)
     {
-      int mph = speedTrainer/1.609344; // mph conversion
-      sprintf_P(buf, PSTR("%d mph"), mph); 
+      int mph = speedTrainer / 1.609344; // mph conversion
+      sprintf_P(buf, PSTR("%d mph"), mph);
     }
     else
     {
@@ -552,7 +568,7 @@ void gradeSimDisplay()
   } else {
 
     displayTextLeft (0, 0, 0, 8, 1, "-- Watts");
-    if (displayUnits==0)
+    if (displayUnits == 0)
     {
       displayTextRight(0, 0, 20, 7, 1, "-- mph");
     } else {
@@ -570,10 +586,10 @@ void gradeSimDisplay()
   int myint = adjActualIncline;
   int myfraction = abs((adjActualIncline -  myint) * 100);
   sprintf_P(buf, PSTR("%d.%02d"), myint, myfraction);
-                 //( row, rowPos, startcol, colwidth, textsize, message )
+  //( row, rowPos, startcol, colwidth, textsize, message )
   displayTextRight (1, 9, 7, 6, 2, buf);
-  
-  // --   row 3 -- 
+
+  // --   row 3 --
   //nn% Bat Level nn.nn%
 
   // -- display battery level
@@ -590,10 +606,10 @@ void gradeSimDisplay()
   // myint = motorPWM;
   // myfraction = (motorPWM -  myint) * 100;
   // sprintf_P(buf, "%d.%02d M", myint, myfraction);
-  
+
   //displayTextLeft( row, rowPos, startcol, colwidth, textsize, message )
-  displayTextLeft (2, 24, 0, 11, 1, buf); 
-    
+  displayTextLeft (2, 24, 0, 11, 1, buf);
+
   // Display smartTrainer target grade with 2 decimal places bottom right
   double adjTargetIncline = inputGrade - trainerInclineZeroOffset;
   myint = adjTargetIncline;
@@ -615,69 +631,69 @@ void gradeSimDisplay()
 
 }
 
+void blePeripheralConnectHandler(BLEDevice central) {
+  // central connected event handler
+  Serial.print("Connected event, central: ");
+  Serial.println(central.address());
+}
+
+void blePeripheralDisconnectHandler(BLEDevice central) {
+  // central disconnected event handler
+  Serial.print("Disconnected event, central: ");
+  Serial.println(central.address());
+}
+
 void getBLEServices() {
 
   //displayLineLeft(1, 12, 0, F("Bluetooth scanning"));
   //displayLineLeft(2, 24, 1, F("for ((CABLE)) Device"));
   //displayLineLeft(2, 24, 2, F(" ")); // erase the unused line
   //doDisplay();
-  static String PeriphUUID="";
-  
+  static String PeriphUUID = "";
+
   if (PeriphUUID != "") {
     // start scanning for the peripheral we were already connected to.
-//    Serial.println("Scanning for" + PeriphUUID); // 
+    Serial.println("scanForUuid:" + PeriphUUID); //
     BLE.scanForUuid(PeriphUUID);
   } else {
-//    Serial.println("Scanning for ((CABLE)) device");
+    //    Serial.println("Scanning for ((CABLE)) device");
     BLE.scan(); // Scan or rescan for BLE services
   }
-  
+
   // check if a peripheral has been discovered and allocate it
   cablePeripheral = BLE.available();
 
   if (cablePeripheral) {
     // discovered a peripheral, print out address, local name, and advertised service
-//    Serial.print("Found ");
-//    Serial.print(cablePeripheral.address());
-//    Serial.print(" '");
-//    Serial.print(cablePeripheral.localName());
-//    Serial.print("' ");
-//    Serial.print(cablePeripheral.advertisedServiceUuid());
-//    Serial.println();
+    Serial.print("discovered ");
+    Serial.print(cablePeripheral.address());
+    Serial.print(" '");
+    Serial.print(cablePeripheral.localName());
+    Serial.print("' ");
+    Serial.print(cablePeripheral.advertisedServiceUuid());
+    Serial.println();
 
     if (cablePeripheral.localName() == ">CABLE") {
-    //if (cablePeripheral.localName() == "KICKR CORE 5043") { // 0x2A63
-    //if (cablePeripheral.localName() == "Cycling Speed and Cadence") {
+      //if (cablePeripheral.localName() == "KICKR CORE 5043") { // 0x2A63
+      //if (cablePeripheral.localName() == "Cycling Speed and Cadence") {
       // stop scanning
       BLE.stopScan();
-//      Serial.println("got " + cablePeripheral.localName() + " (UUID:" + 
-//        cablePeripheral.advertisedServiceUuid() + ") device. scan stopped");
+      Serial.println("found " + cablePeripheral.localName() + " (UUID:" +
+                     cablePeripheral.advertisedServiceUuid() + ") device. scan stopped");
       PeriphUUID = cablePeripheral.advertisedServiceUuid();
-      // connect and subscribe to BLE speed and power
-      getsubscribedtoSensor(cablePeripheral);
-
+      cablePeripheral.connect();
     }
   }
 }
 
-void getsubscribedtoSensor(BLEDevice cablePeripheral) {
-  
-  //   connect to the peripheral. subscribe to power, speed, battery level
-//  Serial.println("Connecting ...");
-  if (cablePeripheral.connect()) {
-   // Serial.println("Connected");
-
-  } else {
- //   Serial.println("Failed to connect to CABLE device");
-    return;
-  }
+void getSubscribedtoSensor(BLEDevice central) {
 
   // discover Cycle Speed and Cadence attributes
   //Serial.println("Discovering Cycle Speed and Cadence service ...");
   if (cablePeripheral.discoverService("1816")) {
-   // Serial.println("Cycle Speed and Cadence Service discovered");
+    Serial.println("Cycle Speed and Cadence Service discovered");
   } else {
-   // Serial.println("Cycle Speed and Cadence Attribute discovery failed.");
+    Serial.println("Cycle Speed and Cadence Attribute discovery failed.");
     cablePeripheral.disconnect();
 
     //resetSystem();
@@ -687,66 +703,142 @@ void getsubscribedtoSensor(BLEDevice cablePeripheral) {
   // discover Cycle Power attributes
   //Serial.println("Discovering Cycle Power service ...");
   if (cablePeripheral.discoverService("1818")) {
-   // Serial.println("Cycle Power Service discovered");
+    Serial.println("Cycle Power Service discovered");
   } else {
-    //Serial.println("Cycle Power Attribute discovery failed.");
+    Serial.println("Cycle Power Attribute discovery failed.");
     cablePeripheral.disconnect();
-
     //resetSystem();
     return;
   }
 
   // discover Battery Level attributes
-  //Serial.println("Discovering Battery Service service ...");
   if (cablePeripheral.discoverService("180f")) {
-    //Serial.println("Battery Service discovered");
+    Serial.println("Battery Service discovered");
   } else {
-    //Serial.println("Battery Service Attribute discovery failed.");
+    Serial.println("Battery Service Attribute discovery failed.");
     //cablePeripheral.disconnect(); not critical
     //return;
   }
-  
+
   // retrieve the characteristics
-  
-  speedCharacteristic = cablePeripheral.characteristic("2a5B");
-  powerCharacteristic = cablePeripheral.characteristic("2a63");
+
+  speedCharacteristic = cablePeripheral.characteristic("2A5B");
+  powerCharacteristic = cablePeripheral.characteristic("2A63");
   batteryCharacteristic = cablePeripheral.characteristic("2A19");
 
-  // subscribe to the characteristics 
+  // subscribe to the characteristics
   // Note authentication is not supported on ArduinoBLE library v1.1.2. This
-  // is why this project uses the Cable device that does not require auth. 
-
+  // is why this project uses the Cable device that does not require auth.
+  
+  //-- cycle speed --
+  speedCharacteristic.setEventHandler(BLEWritten, refreshSpeed);  // assign event handler to handle updates
   if (!speedCharacteristic.subscribe()) {
-    //Serial.println("can not subscribe to speed");
+    Serial.println("can not subscribe to speed");
     cablePeripheral.disconnect();
     return;
   } else {
-    //Serial.println("subscribed to speed");
-  };
-
+      Serial.println("subscribed to speed");
+  }
+  
+  // --- cycle power ---
+  powerCharacteristic.setEventHandler(BLEWritten, refreshPower);  // assign event handler to handle updates
   if (!powerCharacteristic.subscribe()) {
-    //Serial.println("can not subscribe to power"); 
+    Serial.println("can not subscribe to power");
     cablePeripheral.disconnect();
     return;
   } else {
-    //Serial.println("subscribed to power");
+    Serial.println("subscribed to power");
   };
 
   // --- battery level ---
+   batteryCharacteristic.setEventHandler(BLEWritten, refreshBatteryLevel);  // assign event handler to handle updates
   if (!batteryCharacteristic.subscribe()) {
-    //Serial.println("can not subscribe to battery level");
+    Serial.println("can not subscribe to battery level");
     // not critical cablePeripheral.disconnect();
   } else {
-    //Serial.println("subscribed to battery level");
+    Serial.println("subscribed to battery level");
     batteryCharacteristic.readValue(batteryLevel, 1); // Initialize battery level display value
   };
 
-  //  The time consuming BLE setup is done.
-
 }
 
-void refreshSpeedandPower(void) {
+void refreshSpeed(BLEDevice central, BLECharacteristic theCharacteristic) {
+  ///void refreshSpeed(void) {
+  // Speed = (Difference in two successive Wheel Revolution values) / (Difference in two successive Last Wheel Event Time values)
+  // CSCFeature Flags see https://www.bluetooth.com/specifications/specs/cycling-speed-and-cadence-service-1-0/
+  // This allows the Collector to determine whether or not the following fields are present:
+  // bit 0: Wheel Revolution Data Present bit
+  // bit 1: Crank Revolution Data Present bit
+  // bit 2-15: reserved
+  // Verified with LightBlue that once started, these BLE notifications continue to transmit the last values even after the
+  // trainer has stopped.
 
+  if (theCharacteristic.valueUpdated()) {
+
+    //  This value needs a 16 byte array
+    uint8_t holdvalues[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} ;
+
+    //  But I'm only going to read the first 7
+    if (theCharacteristic.readValue(holdvalues, 7))
+    {
+
+      byte flagsFields = holdvalues[0];     // binary flags 8 bit int; 1 = wheel data present, 2 = crank only? I havent observed this state), 3 = wheel and crank data present
+      byte rawValue1 = holdvalues[1];       // revolutions least significant byte in HEX
+      byte rawValue2 = holdvalues[2];       // revolutions next most significant byte in HEX
+      byte rawValue3 = holdvalues[3];       // revolutions next most significant byte in HEX
+      byte rawValue4 = holdvalues[4];       // revolutions most significant byte in HEX
+      byte rawValue5 = holdvalues[5];       // time since last wheel event least sig byte in HEX
+      byte rawValue6 = holdvalues[6];       // time since last wheel event most sig byte in HEX
+
+      if (flagsFields & 0x01) { // bitwise AND to check if wheel data is present
+
+        long currWheelRevs = (rawValue1 + (rawValue2 * 256) + (rawValue3 * 65536) + (rawValue4 * 16777216));
+
+        // The specs say Wheel Event Time value is in 1/1024 second units and rolls over at 65536 or every 42 seconds (65536/1024).
+        // Using an Arduino NANO 33 IOT, I observe it roll over every 32 seconds at 32767 (2 bytes = 16 bits) so Im going with that.
+        CurrWheelEvntTime = (rawValue5 + (rawValue6 * 256));
+
+        if (PrevWheelEvntTime > 0) // not the first wheel event notification
+        {
+
+          // Find distance difference in mm and convert to km
+          float distanceTravelled = ((currWheelRevs - PrevWheelRevs) * wheelCircMM);
+          float kmTravelled = distanceTravelled / 1000000;
+
+          // Find time in 1024ths of a second and convert to hours
+          float timeDifference = CurrWheelEvntTime > PrevWheelEvntTime ? CurrWheelEvntTime - PrevWheelEvntTime : 32767 + CurrWheelEvntTime - PrevWheelEvntTime;
+          float timeSecs = timeDifference / 1024;
+          float timeHrs = timeSecs / 3600;
+          speedKMH = (kmTravelled / timeHrs);// Find speed kmh
+
+          // Sometimes the same message is rebroadcast even when at speed. This results in false 0 kpm. Ignore these when PrevSpeed
+          if (speedKMH > 0 || PrevSpeedKMH < 4)
+          {
+            Serial.print("<< Speed update: "); Serial.print(timeSecs, DEC); Serial.print(" sec / ");
+            Serial.print(speedKMH, DEC); Serial.println(" kpm >>");
+
+            speedTrainer = movingAverageFilter_speed.process(speedKMH);  // average speed
+          }
+        } //else {
+          //Serial.println("Priming the pump");
+        //}
+
+        Serial.print("PrevWheelRevs: "); Serial.print(PrevWheelRevs); Serial.print("; PrevWheelEvntTime: "); Serial.println(PrevWheelEvntTime);
+        Serial.print("currWheelRevs: "); Serial.print(currWheelRevs); Serial.print("; CurrWheelEvntTime: "); Serial.println(CurrWheelEvntTime);
+
+        PrevWheelRevs = currWheelRevs;
+        PrevWheelEvntTime = CurrWheelEvntTime;
+        PrevSpeedKMH = speedKMH;
+      }  // end if wheeldata present
+    } // end if read
+  } // end if (speedCharacteristic.valueUpdated())
+}
+
+//void refreshPower(void) {
+void refreshPower(BLEDevice central, BLECharacteristic powerCharacteristic) {
+  // see specs at https://www.bluetooth.com/specifications/specs/cycling-power-service-1-1/
+  // CSCMeasurement characteristic are notified of updates approximately once per second.
+  
   // Get updated power value
   if (powerCharacteristic.valueUpdated()) {
     // Define an array for the value
@@ -754,83 +846,21 @@ void refreshSpeedandPower(void) {
 
     // Read value into array
     powerCharacteristic.readValue(holdpowervalues, 6);
+
     // Power is returned as watts in location 2 and 3 (loc 0 and 1 is 8 bit flags)
     byte rawpowerValue2 = holdpowervalues[2];       // power least sig byte in HEX
     byte rawpowerValue3 = holdpowervalues[3];       // power most sig byte in HEX
 
-    long rawpowerTotal = (rawpowerValue2 + (rawpowerValue3 * 256)); // Serial.print("Power: "); Serial.println(rawpowerTotal);
+    long rawpowerTotal = (rawpowerValue2 + (rawpowerValue3 * 256));
+    //Serial.print("Power updated: "); Serial.println(rawpowerTotal);
 
     // Use moving average filter to give '3s power'
     powerTrainer = movingAverageFilter_power.process(rawpowerTotal);
   }
-
-  // Get speed - a bit more complication as the GATT specification calls for Cumulative Wheel Rotations and Time since wheel event
-  // So we'll need to do some maths
-
-  if (speedCharacteristic.valueUpdated()) {
-    //  This value needs a 16 byte array
-    uint8_t holdvalues[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} ;
-
-    //  But I'm only going to read the first 7
-    speedCharacteristic.readValue(holdvalues, 7);
-
-    byte rawValue0 = holdvalues[0];       // binary flags 8 bit int
-    byte rawValue1 = holdvalues[1];       // revolutions least significant byte in HEX
-    byte rawValue2 = holdvalues[2];       // revolutions next most significant byte in HEX
-    byte rawValue3 = holdvalues[3];       // revolutions next most significant byte in HEX
-    byte rawValue4 = holdvalues[4];       // revolutions most significant byte in HEX
-    byte rawValue5 = holdvalues[5];       // time since last wheel event least sig byte in HEX
-    byte rawValue6 = holdvalues[6];       // time since last wheel event most sig byte in HEX
-
-    if (firstData) {
-      // Get cumulative wheel revolutions as little endian hex in loc 2,3 and 4 (least significant octet first)
-      WheelRevs1 = (rawValue1 + (rawValue2 * 256) + (rawValue3 * 65536) + (rawValue4 * 16777216));
-      // Get time since last wheel event in 1024ths of a second
-      Time_1 = (rawValue5 + (rawValue6 * 256));
-
-      firstData = false;
-
-    } else {
-
-      // Get second set of data
-      long WheelRevsTemp = (rawValue1 + (rawValue2 * 256) + (rawValue3 * 65536) + (rawValue4 * 16777216));
-      long TimeTemp = (rawValue5 + (rawValue6 * 256));
-
-      if (WheelRevsTemp > WheelRevs1) {           // make sure the bicycle is moving
-        WheelRevs2 = WheelRevsTemp;
-        Time_2 = TimeTemp;
-        firstData = true;
-
-        // Find distance difference in mm and convert to km
-        float distanceTravelled = ((WheelRevs2 - WheelRevs1) * wheelCircMM);
-        float kmTravelled = distanceTravelled / 1000000;
-
-        // Find time in 1024ths of a second and convert to hours
-        float timeDifference = (Time_2 - Time_1);
-        float timeSecs = timeDifference / 1024;
-        float timeHrs = timeSecs / 3600;
-
-        // Find speed kmh
-        speedKMH = (kmTravelled / timeHrs);
-
-        // Reject zero values
-        if ((speedKMH > 0) && (timeSecs > 0))
-        {
-          Serial.print("  speed update: ");
-          Serial.print(timeSecs, DEC);
-          Serial.print("/");
-          Serial.println(speedKMH, DEC);
-
-          speedTrainer = movingAverageFilter_speed.process(speedKMH);  // use moving average filter to find 3s average speed
-          // speedTrainer =  speedKMH;               // redundant step to allow experiments with filters
-        }
-      }
-    }
-
-  }
 }
 
-void refreshBatteryLevel(void) {
+//void refreshBatteryLevel(void) {
+void refreshBatteryLevel(BLEDevice central, BLECharacteristic batteryCharacteristic) {
 
   // Get updated battery level value
   if (batteryCharacteristic.valueUpdated()) {
@@ -841,13 +871,13 @@ void refreshBatteryLevel(void) {
 }
 
 void refreshTemp(void) {
-  
+
   static int tempMvAvgLen = 8;
   static MovingAverageFilter movingAverageFilter_temp(tempMvAvgLen);
   static int IMU_Temperature = 0;
-  
+
   Serial.print("IMU_Temperature:");
-   
+
   float temp;
   if (IMU.temperatureAvailable()) {
     // after IMU.readTemperature() returns, IMU_Temp will contain the temperature reading
@@ -864,7 +894,7 @@ void resetSys(const __FlashStringHelper* txt) {
 
   char buf[20];
   sprintf_P(buf, PSTR("%s"), F(txt));
-  
+
   displayLineLeft(0, 20, 1, " "); // erase line 0
   displayLineLeft(1, 12, 2, buf); // display txt in double size
   displayLineLeft(2, 20, 1, " "); // erase line 2
@@ -920,8 +950,8 @@ bool setD(void)
 }
 bool setWeight(void)
 {
-  float incrementor=1;
-  if (displayUnits==0) // imperial
+  float incrementor = 1;
+  if (displayUnits == 0) // imperial
   {
     incrementor = 0.45359237;
   }
@@ -930,11 +960,11 @@ bool setWeight(void)
     updateUserSettings();
     return true;
   } else {
-    if (displayUnits==0) // imperial
-      displayNumber(riderWeight/incrementor, F(" lbs")); // display as int
+    if (displayUnits == 0) // imperial
+      displayNumber(riderWeight / incrementor, F(" lbs")); // display as int
     else
       displayNumber(riderWeight, F(" kg")); // display as int
-        
+
     return false;
   }
 }
@@ -946,18 +976,18 @@ bool setWheelSize(void)
     updateUserSettings();
     return true;
   } else {
-      //  always format as mm
-      //     if (displayUnits==0) // imperial
-      //      displayNumber(wheelCircMM/0.393701, F(" in"));
-      //     else
-      displayNumber(wheelCircMM, F(" mm"));
+    //  always format as mm
+    //     if (displayUnits==0) // imperial
+    //      displayNumber(wheelCircMM/0.393701, F(" in"));
+    //     else
+    displayNumber(wheelCircMM, F(" mm"));
     return false;
   }
 }
 
 
 boolean settrainerErrSensitivity(void)
-{ 
+{
   if (setDouble(trainerErrSensitivity, 0.0, 2, 0.1))
   {
     updateUserSettings();
@@ -997,13 +1027,13 @@ bool setOLEDDimMode(bool selection)
     setOLEDDimmer (dimmer);
     updateUserSettings();
   }
-  
+
   myMenu.setCurrentMenu(&settingsMenuList);
   myMenu.currentItemIndex = menuDisplayOption; // return to Display option;
   return true;
 }
 
-bool getOLEDDimMode(void){
+bool getOLEDDimMode(void) {
   return dimmer;
 }
 
@@ -1016,7 +1046,7 @@ boolean startDebuggingMode()
 boolean stopDebuggingMode()
 {
   return setDebuggingMode(false);
-} 
+}
 
 bool setDebuggingMode(bool selection)
 {
@@ -1026,7 +1056,7 @@ bool setDebuggingMode(bool selection)
   return true;
 }
 
-bool getDebuggingMode(void){
+bool getDebuggingMode(void) {
   return debugging;
 }
 
@@ -1048,19 +1078,19 @@ bool setUnits(bool selection)
     displayUnits = selection;
     updateUserSettings();
   }
-  
+
   myMenu.setCurrentMenu(&settingsMenuList);
   myMenu.currentItemIndex = menuUnitsOption; // return to Display option;
   return true;
 }
 
-int getDisplayUnits(void){
+int getDisplayUnits(void) {
   return displayUnits;
 }
 
 /* Leveling */
-boolean setLevelingOff(){
-   setLevelingMode(FirstTime);
+boolean setLevelingOff() {
+  setLevelingMode(FirstTime);
 }
 boolean setLevelingOn() {
   setLevelingMode(EveryTime);
@@ -1073,7 +1103,7 @@ boolean setLevelingMode(LevelingMode selection)
     levelingMode = selection;
     updateUserSettings();
   }
-  
+
   myMenu.setCurrentMenu(&settingsMenuList);
   myMenu.currentItemIndex = menuLevelingOption; // return to Leveling option;
   return true;
@@ -1112,7 +1142,7 @@ void initUserSettings()
     updateUserSettings();
     return;
   }
-  
+
   riderWeight = userSettings.riderWeight;
   wheelCircMM = userSettings.wheelCircMM;
   trainerInclineZeroOffset = userSettings.trainerInclineZeroOffset;
