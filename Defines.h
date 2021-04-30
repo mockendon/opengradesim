@@ -30,6 +30,6 @@
 #define BUTTON_DEBOUNCE 60
 #define BUTTON_LONG_PRESS_TIME 2000
 
-#define VERSION_NUMBER 1.06
+#define VERSION_NUMBER 1.07
 
 #endif /* DEFINES_H_ */

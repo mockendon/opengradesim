@@ -9,6 +9,7 @@ boolean settrainerErrSensitivity();
 boolean setManualAdjPcnt();
 boolean lowerTrainer();
 boolean gradeSim();
+boolean gradeSimWithLeveling();
 boolean autoLevelTrainerIncline();
 boolean setPIDParms();
 boolean setP();
@@ -108,8 +109,9 @@ void SimpleSerialMenu::displayMenu() {
  ******************************
  *****************************/
 
-MenuItem PROGMEM mainMenu[2] = {
-  { "Grade Sim", gradeSim }
+MenuItem PROGMEM mainMenu[3] = {
+  { "Ride", gradeSim }
+  , { "Level/Ride", gradeSimWithLeveling }
   , { "Settings", gotoSettingsMenu }
 };
 
@@ -162,7 +164,7 @@ MenuItem PROGMEM unitsMenu[2] = { // display formatting
   , { "Metric", setUnitsMetric } // displayOption=1
 };
 
-MenuList mainMenuList(mainMenu, 2);
+MenuList mainMenuList(mainMenu, 3);
 MenuList settingsMenuList(settingsMenu, 12);
 MenuList displayMenuList(displayMenu, 2);
 MenuList pidParmsMenuList(pidParmsMenu, 5);
