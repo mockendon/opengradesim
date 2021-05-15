@@ -39,6 +39,8 @@
       Leveling Mode: Controls when the leveling mode is entered (each time GradeSim is started or first time only).
       PID parameters: All setting of motor control loop parameters.
       Debug Mode: When On, allows input through Serial console.
+      Rebooting:
+      Lowering Trainer:
 
   - Finished Matt's work on storage of user settings. This could easily be expanded store multiple rider/bike profiles.
   - Added a battery level display that displays the battery level of the <CABLE> device.
@@ -215,7 +217,7 @@ void setup() {
   biColorLED(true, true); // red to green to indicate init. is complete.
   myMenu.setCurrentMenu(&mainMenuList);
 }
-bool debugging = false;
+bool Debugging = false;
 
 ////////////////////////////////  loop  ///////////////////////////////////////
 
@@ -291,9 +293,19 @@ boolean gradeSim() {
     }
   }
 
-  if (!cablePeripheral.connected())
+  if (!cablePeripheral.connected() && !Debugging) {
+    getBLEServices();
+  } else {
+    if (cablePeripheral.connected() && Debugging) {
+      cablePeripheral.disconnect();
+    }
+  }
+
+  if (Debugging)
   {
-    getBLEServices(); // BLE setup
+    //    powerTrainer = movingAverageFilter_power.process(210);
+    //    speedTrainer = movingAverageFilter_speed.process(15);
+    serialReceive();
   }
 
   // get input
@@ -311,16 +323,8 @@ boolean gradeSim() {
         trainerMode = Manual; // switching to manual mode
         return false;
       }
-      if (debugging)
-      {
-        //powerTrainer = movingAverageFilter_power.process(210);
-        //speedTrainer = movingAverageFilter_speed.process(15);
-        serialReceive();
-      } else {
-
-        calculateTargetGrade(); // Use power and speed to calculate the grade
-        inputGrade = trainerInclineZeroOffset + inputGrade;
-      }
+      calculateTargetGrade(); // Use power and speed to calculate the grade
+      inputGrade = trainerInclineZeroOffset + inputGrade;
       break;
   } // end switch
 
@@ -532,12 +536,9 @@ void gradeSimDisplay()
   char buf[7];
 
   // watts, kph/mph
-  if (cablePeripheral.connected()) {
+  if (cablePeripheral.connected() || Debugging) {
     sprintf_P(buf, PSTR("%d Watts"), powerTrainer);
     displayTextLeft (0, 0, 0, 8, 1, buf);
-
-    //  sprintf_P(buf, PSTR("%d%% b"), batteryLevel[0]);
-    //  displayTextRight(0, 0, 12, 7, 1, buf);
 
     if (displayUnits == 0)
     {
@@ -578,10 +579,10 @@ void gradeSimDisplay()
   //nn% Bat Level nn.nn%
 
   // -- display battery level
-  if (cablePeripheral.connected()) {
-    sprintf_P(buf, PSTR("%d%% Bat"), batteryLevel[0]);
+  if (cablePeripheral.connected() || Debugging) {
+    sprintf_P(buf, PSTR("%d%% Bt"), batteryLevel[0]);
   } else {
-    sprintf_P(buf, PSTR("---%% Bat"), 100);
+    sprintf_P(buf, PSTR("---%% Bt"), 100);
   }
 
   // -- display IMU temp
@@ -608,7 +609,7 @@ void gradeSimDisplay()
       sprintf_P(buf, PSTR("Manual %d.%02d"), myint, myfraction);
       break;
     case 2:
-      sprintf_P(buf, PSTR("Trainer %d.%02d"), myint, myfraction);
+      sprintf_P(buf, PSTR("GradeSim %d.%02d"), myint, myfraction);
       break;
   }
   //void displayTextRight( row, rowPos, startcol, colwidth, textsize, message)
@@ -875,7 +876,7 @@ void refreshTemp(void) {
   }
 }
 
-void resetSys(const __FlashStringHelper* txt) {
+void resetSys(const __FlashStringHelper * txt) {
 
   char buf[20];
   sprintf_P(buf, PSTR("%s"), F(txt));
@@ -894,21 +895,21 @@ bool resetSystem(void) {
 }
 
 bool gradeSimWithLeveling(void) {
-  static int loopCnt = 0
- 
+  static int loopCnt = 0;
+
   switch (loopCnt) {
-    case 0: 
-      loopCnt=1;
-      break; 
+    case 0:
+      loopCnt = 1;
+      break;
     case 1:
       trainerMode = LevelTrainer;
       levelingMode = EveryTime; // require leveling this time
-      loopCnt=2;
+      loopCnt = 2;
       break;
-    case 2:   
+    case 2:
       levelingMode = userSettings.levelingMode;
-      loopCnt=3; // out of the way
-      break;   
+      loopCnt = 3; // out of the way
+      break;
   }
 
   if (gradeSim()) {
@@ -1063,14 +1064,14 @@ boolean stopDebuggingMode()
 
 bool setDebuggingMode(bool selection)
 {
-  debugging = selection;
+  Debugging = selection;
   myMenu.setCurrentMenu(&settingsMenuList);
   myMenu.currentItemIndex = menuDebugMenuOption; // return to Debug option;
   return true;
 }
 
 bool getDebuggingMode(void) {
-  return debugging;
+  return Debugging;
 }
 
 /* Display Units */
@@ -1246,6 +1247,20 @@ void serialReceive()
         break;
       case '-':
         inputGrade = inputGrade - modifier;
+        break;
+      case 'p':
+      Serial.println("power v");
+        powerTrainer = movingAverageFilter_power.process(powerTrainer - 50);
+        break;
+      case 'P':
+        Serial.println("power ^");
+        powerTrainer = movingAverageFilter_power.process(powerTrainer + 50);
+        break;
+      case 's':
+        speedTrainer = movingAverageFilter_speed.process(speedTrainer-5);
+        break;
+      case 'S':
+        speedTrainer = movingAverageFilter_speed.process(speedTrainer+5);
         break;
     }
 
