@@ -37,15 +37,15 @@
   
   - Finished Matt's work on storage of user settings. This could easily be expanded store multiple rider/bike profiles.
   - Added a battery level display that displays the battery level of the <CABLE> device.
-  - Added a IMU temperature sensing and display.  This can be used to ensure your arduino isnt overheatin in its case. This was achieved by 
+  - Added a IMU temperature display.  This can be used to ensure your arduino isnt overheating in its case. This was achieved by 
   upgrading to the LSM6DS3 driver. See https://github.com/arduino-libraries/Arduino_LSM6DS3/issues/9. Uncomment the display lines to use.
 
   The circuit: This is basically like Matt's circuit except -
   - I use a bigger actuator that requires a bigger motor driver. After experementing with a few different boards I ended up using a
   Sabertooth 3x32 that I had from a previous project. They are pricey, but worth it. It can be controlled with 3V signal eliminating the
   need for a logic level shifter, can be controlled with just two wires, and COMPLETELY ELIMINATED THE MOTOR WHINE AT ALL SPEEDS.
-  (Update - this was a bad idea. The sabertooth is really designed to be powered by a battery or a PSU. I couldnt get it to run for more than a
-  few minutes off a wall wart.)
+  Update - this was a bad idea. The sabertooth is really designed to be powered by a battery or a PSU. I couldnt get it to run for more than a
+  few minutes off a wall wart, so I am using a 12 V PSU.
   - Uses a 3 button pad instead of 2.
   - Added a bi-color LED to indicate state.
   - Added 3 POTS for storing initial PID param values. I ended up not using these for anything because the PID values are stored in ROM and can
