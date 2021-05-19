@@ -97,8 +97,8 @@ long WheelRevs1;                  // For speed data set 1
 long Time_1;                      // For speed data set 1
 long WheelRevs2;                  // For speed data set 2
 long Time_2;                      // For speed data set 2
-bool firstData = true;
 int speedKMH;                     // Calculated speed in KM per Hr
+int PrevSpeedKMH;                 // Prev speed;
 
 // Custom Char Bluetooth Logo
 
@@ -433,24 +433,12 @@ long rawpowerTotal = (rawpowerValue2 + (rawpowerValue3 * 256));
       byte rawValue5 = holdvalues[5];       // time since last wheel event least sig byte in HEX
       byte rawValue6 = holdvalues[6];       // time since last wheel event most sig byte in HEX
 
-      if (firstData) {
         // Get cumulative wheel revolutions as little endian hex in loc 2,3 and 4 (least significant octet first)
         WheelRevs1 = (rawValue1 + (rawValue2 * 256) + (rawValue3 * 65536) + (rawValue4 * 16777216));
         // Get time since last wheel event in 1024ths of a second
         Time_1 = (rawValue5 + (rawValue6 * 256));
 
-        firstData = false;
-
-      } else {
-
-        // Get second set of data
-        long WheelRevsTemp = (rawValue1 + (rawValue2 * 256) + (rawValue3 * 65536) + (rawValue4 * 16777216));
-        long TimeTemp = (rawValue5 + (rawValue6 * 256));
-
-        if (WheelRevsTemp > WheelRevs1) {           // make sure the bicycle is moving
-          WheelRevs2 = WheelRevsTemp;
-          Time_2 = TimeTemp;
-          firstData = true;
+        if (WheelRevs1 > WheelRevs2) {           // make sure the bicycle is moving
 
           // Find distance difference in cm and convert to km
           float distanceTravelled = ((WheelRevs2 - WheelRevs1) * wheelCircCM);
@@ -467,19 +455,17 @@ long rawpowerTotal = (rawpowerValue2 + (rawpowerValue3 * 256));
           Serial.print("  speed: ");
           Serial.println(speedKMH, DEC);
 
-
-          // Reject zero values
-          if (speedKMH < 0){}else{
+          // Sometimes the same message is rebroadcast even when at speed. This results in false 0 kpm. Ignore these when PrevSpeed > 4 kph
+          if (speedKMH > 0 || PrevSpeedKMH < 4){
           speedTrainer = movingAverageFilter_speed.process(speedKMH);  // use moving average filter to find 3s average speed
          // speedTrainer =  speedKMH;               // redundant step to allow experiments with filters
- 
-
-          
           }
+          WheelRevs2 = WheelRevs1;
+          Time_2 = Time_1;
+          PrevSpeedKMH = speedKMH;
         }
       }
-
-    }
+  
     
 // we only need to do all this 4 or 5 times a second!
   delay(200);
